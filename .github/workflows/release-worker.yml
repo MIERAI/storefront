@@ -27,7 +27,7 @@ jobs:
     needs: image
     uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
     with:
-      app: storefront-worker
+      app: storefront   # storefront/app.yaml says which file holds this image (worker/values-<env>.yaml)
       images: ghcr.io/mierai/storefront-worker=${{ needs.image.outputs.tag }}
     secrets:
       MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}
