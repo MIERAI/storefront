@@ -1,0 +1,33 @@
+# worker: test → image (signed) → dev (Helm values: gitops-manifests storefront-worker/values-dev.yaml).
+# Only changes under services/worker (or the module) release it: the services of this monorepo are released, and
+# promoted, independently.
+name: release-worker
+on:
+  push:
+    branches: [main]
+    paths: ["services/worker/**", go.mod, ".github/workflows/release-worker.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: { group: release-worker, cancel-in-progress: false }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: go.mod }
+      - run: go vet ./services/worker/ && go test -race ./services/worker/
+  image:
+    needs: test
+    permissions: { contents: read, packages: write, id-token: write }
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/build-image.yml@main
+    with: { image: storefront-worker, dockerfile: services/worker/Dockerfile, sign: true }
+  promote:
+    needs: image
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
+    with:
+      app: storefront-worker
+      images: ghcr.io/mierai/storefront-worker=${{ needs.image.outputs.tag }}
+    secrets:
+      MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}
