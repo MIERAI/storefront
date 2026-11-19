@@ -37,7 +37,7 @@ func (w *worker) mux() *http.ServeMux {
 func main() {
 	w := &worker{version: os.Getenv("APP_VERSION")}
 	go func() {
-		for range time.Tick(10 * time.Second) {
+		for range time.Tick(5 * time.Second) {
 			w.tick()
 			slog.Info("processed pending orders", "total", w.processed.Load())
 		}
