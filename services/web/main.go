@@ -15,7 +15,7 @@ import (
 )
 
 var page = template.Must(template.New("").Parse(`<!doctype html><meta charset="utf-8"><title>storefront</title>
-<h1>storefront</h1><p>web {{.Web}} · api {{or .API "unreachable"}}</p>
+<h1>storefront</h1><p>today: free shipping over ¥3000</p><p>web {{.Web}} · api {{or .API "unreachable"}}</p>
 <ul>{{range .Products}}<li>{{.Name}} — ¥{{.Price}}</li>{{end}}</ul>`))
 
 type products struct {
