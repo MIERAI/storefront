@@ -1,0 +1,32 @@
+# web: test → image (signed) → dev. Only changes under services/web (or the module) release it: the two services of
+# this monorepo are released, and promoted, independently.
+name: release-web
+on:
+  push:
+    branches: [main]
+    paths: ["services/web/**", go.mod, ".github/workflows/release-web.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: { group: release-web, cancel-in-progress: false }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: go.mod }
+      - run: go vet ./services/web/ && go test -race ./services/web/
+  image:
+    needs: test
+    permissions: { contents: read, packages: write, id-token: write }
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/build-image.yml@main
+    with: { image: storefront-web, dockerfile: services/web/Dockerfile, sign: true }
+  promote:
+    needs: image
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
+    with:
+      app: storefront
+      images: ghcr.io/mierai/storefront-web=${{ needs.image.outputs.tag }}
+    secrets:
+      MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}

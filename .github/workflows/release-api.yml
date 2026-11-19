@@ -1,0 +1,32 @@
+# api: test → image (signed) → dev. Only changes under services/api (or the module) release it: the two services of
+# this monorepo are released, and promoted, independently.
+name: release-api
+on:
+  push:
+    branches: [main]
+    paths: ["services/api/**", go.mod, ".github/workflows/release-api.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency: { group: release-api, cancel-in-progress: false }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: go.mod }
+      - run: go vet ./services/api/ && go test -race ./services/api/
+  image:
+    needs: test
+    permissions: { contents: read, packages: write, id-token: write }
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/build-image.yml@main
+    with: { image: storefront-api, dockerfile: services/api/Dockerfile, sign: true }
+  promote:
+    needs: image
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
+    with:
+      app: storefront
+      images: ghcr.io/mierai/storefront-api=${{ needs.image.outputs.tag }}
+    secrets:
+      MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}
