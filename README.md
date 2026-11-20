@@ -7,7 +7,30 @@ promoted on its own through three environments, dev → staging → prod:
 
 | Service | | Manifests (gitops-manifests) |
 |---|---|---|
-| `services/web` | the page | kustomize `storefront/overlays/<env>` |
+| `services/web` | the page; takes orders (`POST /orders`) | kustomize `storefront/overlays/<env>` |
 | `services/api` | products | kustomize `storefront/overlays/<env>` |
-| `services/worker` | background jobs | Helm chart `storefront-worker/chart` + `values-<env>.yaml` | The third reference shape of the platform, next to
+| `services/worker` | processes the orders | Helm chart `storefront-worker/chart` + `values-<env>.yaml` | The third reference shape of the platform, next to
 sample-app (one service, push) and api-factory (design PR → generated code).
+
+## The order pipeline (asynchronous)
+
+```
+user ─POST /orders→ web ─INSERT (pending)→ Postgres ←claim (FOR UPDATE SKIP LOCKED), work, done─ worker ×2
+                     └─ watches the pipeline (internal/orders Check): backlog age, overdue orders
+```
+
+Postgres is a CloudNativePG cluster per environment (gitops-manifests `storefront/base/postgres.yaml`); web and
+worker read `DATABASE_URL` from the secret the operator generates and create the table at start (`internal/orders`).
+A claimed order stays locked in the worker's transaction until it is done, so a worker that dies rolls it back to
+pending instead of losing it. The SLIs of this shape (freshness, completeness) are exported by **web**, not the
+worker: a gauge exported by the worker would disappear with the last worker, exactly when it matters.
+
+| Metric | From | SLI |
+|---|---|---|
+| `http_requests_total{route="POST /orders"}` | web | order intake availability |
+| `orders_oldest_pending_age_seconds` | web (every 10s; absent while the database cannot be asked) | freshness |
+| `orders_overdue_total` / `orders_created_total` | web | completeness: orders not processed within 5 min, counted once |
+| `orders_pending`, `order_processing_delay_seconds`, `orders_processed_total`, `worker_errors_total` | web / worker | dashboards |
+
+Tests of `internal/orders` need a Postgres: `TEST_DATABASE_URL=postgres://postgres:test@localhost:5432/postgres?sslmode=disable go test ./...`
+(skipped without it; CI runs one).

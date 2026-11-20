@@ -7,6 +7,8 @@
 //	                                               refused): where a symptom on this service comes from
 //	upstream_request_duration_seconds{upstream}    histogram
 //
+// Services add their own: Add (counter), Set / Unset (gauge), ObserveIn (histogram with its own buckets).
+//
 // Routes are the mux patterns (bounded cardinality), never raw paths. Served on a port of its own (Serve), apart
 // from the traffic port.
 package obs
@@ -27,17 +29,21 @@ import (
 var Buckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5}
 
 type Metrics struct {
-	mu   sync.Mutex
-	reqs map[string]uint64 // label set (rendered) → count
-	hist map[string]*histogram
+	mu     sync.Mutex
+	reqs   map[string]uint64 // name{label set} → count
+	gauges map[string]float64
+	hist   map[string]*histogram
 }
 
 type histogram struct {
-	counts []uint64 // per bucket, +Inf last
-	sum    float64
+	buckets []float64
+	counts  []uint64 // per bucket, +Inf last
+	sum     float64
 }
 
-func New() *Metrics { return &Metrics{reqs: map[string]uint64{}, hist: map[string]*histogram{}} }
+func New() *Metrics {
+	return &Metrics{reqs: map[string]uint64{}, gauges: map[string]float64{}, hist: map[string]*histogram{}}
+}
 
 func labels(kv ...string) string {
 	var b strings.Builder
@@ -50,23 +56,57 @@ func labels(kv ...string) string {
 	return b.String()
 }
 
-func (m *Metrics) count(name, ls string) {
+func (m *Metrics) count(name, ls string) { m.add(name, ls, 1) }
+
+func (m *Metrics) add(name, ls string, n uint64) {
 	m.mu.Lock()
-	m.reqs[name+"{"+ls+"}"]++
+	m.reqs[name+"{"+ls+"}"] += n
+	m.mu.Unlock()
+}
+
+// Add adds n to the counter name{labels} (kv: label, value, …). Add(name, 0, …) exports it at 0: a counter that
+// appears only with its first event hides that event from rate(), and an error counter absent until the first
+// error reads as "SLI absent".
+func (m *Metrics) Add(name string, n uint64, kv ...string) { m.add(name, labels(kv...), n) }
+
+// Inc adds 1 to the counter name{labels}.
+func (m *Metrics) Inc(name string, kv ...string) { m.Add(name, 1, kv...) }
+
+// Set sets the gauge name{labels}.
+func (m *Metrics) Set(name string, v float64, kv ...string) {
+	m.mu.Lock()
+	m.gauges[name+"{"+labels(kv...)+"}"] = v
+	m.mu.Unlock()
+}
+
+// Unset removes the gauge name{labels}: when its value is unknown, no series is better than a stale one.
+func (m *Metrics) Unset(name string, kv ...string) {
+	m.mu.Lock()
+	delete(m.gauges, name+"{"+labels(kv...)+"}")
 	m.mu.Unlock()
 }
 
 func (m *Metrics) observe(name, ls string, d time.Duration) {
+	m.observeIn(name, ls, Buckets, d.Seconds())
+}
+
+// ObserveIn records v (seconds) in the histogram name{labels} with its own bucket edges (ascending). The edges of a
+// series are fixed by its first observation.
+func (m *Metrics) ObserveIn(name string, buckets []float64, v float64, kv ...string) {
+	m.observeIn(name, labels(kv...), buckets, v)
+}
+
+func (m *Metrics) observeIn(name, ls string, buckets []float64, v float64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	k := name + "\x00" + ls
 	h := m.hist[k]
 	if h == nil {
-		h = &histogram{counts: make([]uint64, len(Buckets)+1)}
+		h = &histogram{buckets: buckets, counts: make([]uint64, len(buckets)+1)}
 		m.hist[k] = h
 	}
-	h.counts[sort.SearchFloat64s(Buckets, d.Seconds())]++
-	h.sum += d.Seconds()
+	h.counts[sort.SearchFloat64s(h.buckets, v)]++
+	h.sum += v
 }
 
 // Write: every series, sorted (stable output for tests and diffs).
@@ -85,7 +125,20 @@ func (m *Metrics) Write(w io.Writer) {
 			fmt.Fprintf(w, "# TYPE %s counter\n", name)
 			typed[name] = true
 		}
-		fmt.Fprintf(w, "%s %d\n", k, m.reqs[k])
+		fmt.Fprintf(w, "%s %d\n", strings.TrimSuffix(k, "{}"), m.reqs[k])
+	}
+	keys = keys[:0]
+	for k := range m.gauges {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		name := k[:strings.IndexByte(k, '{')]
+		if !typed[name] {
+			fmt.Fprintf(w, "# TYPE %s gauge\n", name)
+			typed[name] = true
+		}
+		fmt.Fprintf(w, "%s %s\n", strings.TrimSuffix(k, "{}"), strconv.FormatFloat(m.gauges[k], 'g', -1, 64))
 	}
 	keys = keys[:0]
 	for k := range m.hist {
@@ -99,15 +152,19 @@ func (m *Metrics) Write(w io.Writer) {
 			typed[name] = true
 		}
 		h := m.hist[k]
-		var cum uint64
-		for i, b := range Buckets {
-			cum += h.counts[i]
-			fmt.Fprintf(w, "%s_bucket{%s,le=%q} %d\n", name, ls, strconv.FormatFloat(b, 'g', -1, 64), cum)
+		le := "le="
+		if ls != "" {
+			le = ls + ",le="
 		}
-		cum += h.counts[len(Buckets)]
-		fmt.Fprintf(w, "%s_bucket{%s,le=\"+Inf\"} %d\n", name, ls, cum)
-		fmt.Fprintf(w, "%s_sum{%s} %g\n", name, ls, h.sum)
-		fmt.Fprintf(w, "%s_count{%s} %d\n", name, ls, cum)
+		var cum uint64
+		for i, b := range h.buckets {
+			cum += h.counts[i]
+			fmt.Fprintf(w, "%s_bucket{%s%q} %d\n", name, le, strconv.FormatFloat(b, 'g', -1, 64), cum)
+		}
+		cum += h.counts[len(h.buckets)]
+		fmt.Fprintf(w, "%s_bucket{%s\"+Inf\"} %d\n", name, le, cum)
+		fmt.Fprintf(w, "%s %g\n", strings.TrimSuffix(name+"_sum{"+ls+"}", "{}"), h.sum)
+		fmt.Fprintf(w, "%s %d\n", strings.TrimSuffix(name+"_count{"+ls+"}", "{}"), cum)
 	}
 }
 
