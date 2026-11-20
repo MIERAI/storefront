@@ -3,7 +3,9 @@ package fault
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestSwitches(t *testing.T) {
@@ -38,5 +40,20 @@ func TestSwitches(t *testing.T) {
 	}
 	if New("", 0).Fail("products") || (*Switches)(nil).Fail("products") {
 		t.Fatal("no directory: no fault")
+	}
+}
+
+func TestExpires(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	s := New(dir, 0)
+	os.WriteFile(filepath.Join(dir, "products-errors"), []byte("1"), 0o644)
+	os.WriteFile(filepath.Join(dir, "expires"), []byte(strconv.FormatInt(time.Now().Add(time.Hour).Unix(), 10)), 0o644)
+	if !s.Fail("products") {
+		t.Fatal("before expiry: fault on")
+	}
+	os.WriteFile(filepath.Join(dir, "expires"), []byte(strconv.FormatInt(time.Now().Add(-time.Second).Unix(), 10)), 0o644)
+	if s.Fail("products") {
+		t.Fatal("after expiry: fault off")
 	}
 }
