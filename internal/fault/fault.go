@@ -4,8 +4,10 @@
 // deleting it turns it off, no restart (kubelet updates the volume within ~1 min).
 //
 //	<dir>/<name>-errors   a ratio 0..1: that share of the requests fail with 503
+//	<dir>/expires         unix seconds: after this every fault is off, whether or not the ConfigMap is deleted
 //
-// No directory, no file, or an unparsable value: no fault.
+// No directory, no file, or an unparsable value: no fault. A fault without `expires` never expires — the experiment
+// runner always writes one: when the runner dies (a laptop going to sleep did, 2026-11-20), the fault must end anyway.
 package fault
 
 import (
@@ -49,10 +51,14 @@ func (s *Switches) value(key string) float64 {
 			if err != nil {
 				continue
 			}
-			if v, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64); err == nil && v >= 0 && v <= 1 {
+			v, err := strconv.ParseFloat(strings.TrimSpace(string(b)), 64)
+			if err == nil && (e.Name() == "expires" || v >= 0 && v <= 1) {
 				s.vals[e.Name()] = v
 			}
 		}
+	}
+	if exp, ok := s.vals["expires"]; ok && float64(time.Now().Unix()) > exp {
+		return 0
 	}
 	return s.vals[key]
 }
