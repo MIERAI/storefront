@@ -5,7 +5,7 @@ name: release-worker
 on:
   push:
     branches: [main]
-    paths: ["services/worker/**", go.mod, ".github/workflows/release-worker.yml"]
+    paths: ["services/worker/**", "internal/**", go.mod, go.sum, ".github/workflows/release-worker.yml"]
   workflow_dispatch:
 permissions:
   contents: read

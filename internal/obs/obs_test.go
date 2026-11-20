@@ -55,3 +55,36 @@ func TestClientCountsUpstream(t *testing.T) {
 		}
 	}
 }
+
+func TestCountersGaugesHistograms(t *testing.T) {
+	m := New()
+	m.Add("orders_created_total", 0)
+	m.Add("orders_overdue_total", 0)
+	m.Inc("orders_created_total")
+	m.Set("orders_pending", 3)
+	m.Set("orders_oldest_pending_age_seconds", 12.5)
+	m.Set("gone", 1)
+	m.Unset("gone")
+	b := []float64{1, 10, 60}
+	m.ObserveIn("order_processing_delay_seconds", b, 0.5)
+	m.ObserveIn("order_processing_delay_seconds", b, 30)
+	var out bytes.Buffer
+	m.Write(&out)
+	for _, want := range []string{
+		"# TYPE orders_created_total counter\norders_created_total 1\n",
+		"orders_overdue_total 0\n",
+		"# TYPE orders_oldest_pending_age_seconds gauge\norders_oldest_pending_age_seconds 12.5\n",
+		"orders_pending 3\n",
+		`order_processing_delay_seconds_bucket{le="1"} 1`,
+		`order_processing_delay_seconds_bucket{le="10"} 1`,
+		`order_processing_delay_seconds_bucket{le="60"} 2`,
+		"order_processing_delay_seconds_count 2\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing %q in\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "gone") {
+		t.Error("unset gauge still exported")
+	}
+}
