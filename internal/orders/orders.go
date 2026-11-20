@@ -87,11 +87,14 @@ func Process(ctx context.Context, db *pgxpool.Pool, work func(context.Context, O
 	return o, ok && err == nil, err
 }
 
-// State of the pipeline, as Check sees it.
+// State of the pipeline, as Check sees it. Through is the freshness watermark: every order created before it is
+// processed (the oldest unprocessed order's creation time, or the database's now when there is none); the
+// freshness SLI is now - Through.
 type State struct {
 	Pending   int64         // orders not processed yet (including those a worker is working on)
-	OldestAge time.Duration // age of the oldest of them (0: none) — the freshness SLI
-	Overdue   int64         // orders that crossed the deadline unprocessed since the last Check — completeness
+	OldestAge time.Duration // age of the oldest of them (0: none)
+	Through   time.Time
+	Overdue   int64 // orders that crossed the deadline unprocessed since the last Check — completeness
 }
 
 // Check measures the backlog and marks every order still unprocessed deadline after its creation as overdue,
@@ -99,8 +102,8 @@ type State struct {
 // right now are skipped: they are counted on a later Check if their processing fails.
 func Check(ctx context.Context, db *pgxpool.Pool, deadline time.Duration) (s State, err error) {
 	var secs float64
-	if err = db.QueryRow(ctx, `SELECT count(*), coalesce(extract(epoch FROM now() - min(created_at)), 0)::float8
-		FROM orders WHERE status = 'pending'`).Scan(&s.Pending, &secs); err != nil {
+	if err = db.QueryRow(ctx, `SELECT count(*), coalesce(extract(epoch FROM now() - min(created_at)), 0)::float8,
+		coalesce(min(created_at), now()) FROM orders WHERE status = 'pending'`).Scan(&s.Pending, &secs, &s.Through); err != nil {
 		return s, err
 	}
 	s.OldestAge = time.Duration(secs * float64(time.Second))

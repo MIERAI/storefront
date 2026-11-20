@@ -12,8 +12,10 @@
 // exported by the worker would vanish with the last worker, exactly when it matters.
 //
 //	orders_created_total                     orders accepted
-//	orders_pending, orders_oldest_pending_age_seconds   backlog; the age is the freshness SLI (absent while the
-//	                                         database cannot be asked: unknown is not fresh)
+//	orders_processed_through_timestamp_seconds   every order created before it is processed (the oldest
+//	                                         unprocessed order's creation time, or now): freshness SLI = time() - it.
+//	                                         Absent while the database cannot be asked (unknown is not fresh)
+//	orders_pending, orders_oldest_pending_age_seconds   backlog (dashboards)
 //	orders_overdue_total                     orders not processed ORDER_DEADLINE after creation (completeness SLI:
 //	                                         bad events among orders_created_total), each counted once
 package main
@@ -105,7 +107,9 @@ func watch(ctx context.Context, db *pgxpool.Pool, m *obs.Metrics, interval, dead
 			slog.Warn("check orders", "err", err)
 			m.Unset("orders_pending")
 			m.Unset("orders_oldest_pending_age_seconds")
+			m.Unset("orders_processed_through_timestamp_seconds")
 		} else {
+			m.Set("orders_processed_through_timestamp_seconds", float64(s.Through.UnixMilli())/1000)
 			m.Set("orders_pending", float64(s.Pending))
 			m.Set("orders_oldest_pending_age_seconds", s.OldestAge.Seconds())
 		}
