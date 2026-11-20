@@ -131,7 +131,8 @@ func TestCheckFreshnessAndOverdueOnce(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := testDB(t)
-	if s, err := Check(ctx, db, time.Minute); err != nil || s != (State{}) {
+	if s, err := Check(ctx, db, time.Minute); err != nil || s.Pending != 0 || s.OldestAge != 0 || s.Overdue != 0 ||
+		time.Since(s.Through).Abs() > time.Minute { // nothing pending: processed through now
 		t.Fatalf("empty: %+v %v", s, err)
 	}
 	Create(ctx, db, 100)
@@ -140,7 +141,8 @@ func TestCheckFreshnessAndOverdueOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, err := Check(ctx, db, 5*time.Minute)
-	if err != nil || s.Pending != 2 || s.OldestAge < 10*time.Minute || s.OldestAge > 11*time.Minute || s.Overdue != 1 {
+	if err != nil || s.Pending != 2 || s.OldestAge < 10*time.Minute || s.OldestAge > 11*time.Minute || s.Overdue != 1 ||
+		age(s.Through) < 10*time.Minute || age(s.Through) > 11*time.Minute {
 		t.Fatalf("%+v %v", s, err)
 	}
 	if s, err := Check(ctx, db, 5*time.Minute); err != nil || s.Overdue != 0 { // counted once
@@ -177,3 +179,5 @@ func TestCheckFreshnessAndOverdueOnce(t *testing.T) {
 		t.Fatalf("after the failure: %+v %v", s, err)
 	}
 }
+
+func age(t time.Time) time.Duration { return time.Since(t) }

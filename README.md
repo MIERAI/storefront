@@ -28,9 +28,9 @@ worker: a gauge exported by the worker would disappear with the last worker, exa
 | Metric | From | SLI |
 |---|---|---|
 | `http_requests_total{route="POST /orders"}` | web | order intake availability |
-| `orders_oldest_pending_age_seconds` | web (every 10s; absent while the database cannot be asked) | freshness |
+| `orders_processed_through_timestamp_seconds` | web (every 10s; absent while the database cannot be asked) | freshness: `time() -` it, the age of the oldest unprocessed order (or ~0) |
 | `orders_overdue_total` / `orders_created_total` | web | completeness: orders not processed within 5 min, counted once |
-| `orders_pending`, `order_processing_delay_seconds`, `orders_processed_total`, `worker_errors_total` | web / worker | dashboards |
+| `orders_pending`, `orders_oldest_pending_age_seconds`, `order_processing_delay_seconds`, `orders_processed_total`, `worker_errors_total` | web / worker | dashboards |
 
 Tests of `internal/orders` need a Postgres: `TEST_DATABASE_URL=postgres://postgres:test@localhost:5432/postgres?sslmode=disable go test ./...`
 (skipped without it; CI runs one).
