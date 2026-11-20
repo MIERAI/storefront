@@ -27,6 +27,6 @@ jobs:
     uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
     with:
       app: storefront
-      images: ghcr.io/mierai/storefront-web=${{ needs.image.outputs.tag }}
+      images: ${{ needs.image.outputs.name }}=${{ needs.image.outputs.tag }}   # ghcr.io/<this repository's owner>/storefront-web
     secrets:
       MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}
