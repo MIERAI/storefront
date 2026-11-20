@@ -2,6 +2,7 @@
 //
 //	GET /products → [{"id": 1, "name": "…", "price": 120}] (+ "version")
 //	GET /healthz  → ok (header X-App-Version)
+//	:9090 /metrics (internal/obs)
 package main
 
 import (
@@ -10,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/MIERAI/storefront/internal/obs"
 )
 
 type product struct {
@@ -35,7 +38,9 @@ func newMux(version string) *http.ServeMux {
 
 func main() {
 	version := os.Getenv("APP_VERSION")
-	srv := &http.Server{Addr: ":8080", Handler: newMux(version), ReadHeaderTimeout: 5 * time.Second}
+	m := obs.New()
+	m.Serve(":9090")
+	srv := &http.Server{Addr: ":8080", Handler: m.Instrument(newMux(version)), ReadHeaderTimeout: 5 * time.Second}
 	slog.Info("api listening", "version", version)
 	if err := srv.ListenAndServe(); err != nil {
 		slog.Error("serve", "err", err)

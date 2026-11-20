@@ -4,7 +4,7 @@ name: release-web
 on:
   push:
     branches: [main]
-    paths: ["services/web/**", go.mod, ".github/workflows/release-web.yml"]
+    paths: ["services/web/**", "internal/**", go.mod, ".github/workflows/release-web.yml"]
   workflow_dispatch:
 permissions:
   contents: read

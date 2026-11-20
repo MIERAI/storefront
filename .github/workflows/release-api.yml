@@ -4,7 +4,7 @@ name: release-api
 on:
   push:
     branches: [main]
-    paths: ["services/api/**", go.mod, ".github/workflows/release-api.yml"]
+    paths: ["services/api/**", "internal/**", go.mod, ".github/workflows/release-api.yml"]
   workflow_dispatch:
 permissions:
   contents: read
