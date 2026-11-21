@@ -11,6 +11,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 // testDB: a pool on a schema of its own (tests run in parallel), in TEST_DATABASE_URL (CI: a postgres service).
@@ -35,6 +39,7 @@ func testDB(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	cfg.ConnConfig.RuntimeParams["search_path"] = name
+	cfg.ConnConfig.Tracer = queryTracer{} // as Open
 	db, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -181,3 +186,58 @@ func TestCheckFreshnessAndOverdueOnce(t *testing.T) {
 }
 
 func age(t time.Time) time.Duration { return time.Since(t) }
+
+func TestSpanName(t *testing.T) {
+	for sql, want := range map[string]string{
+		"INSERT INTO orders (amount) VALUES ($1) RETURNING id":   "INSERT orders",
+		"SELECT id, amount FROM orders WHERE status = 'pending'": "SELECT orders",
+		"UPDATE orders SET status = 'done' WHERE id = $1":        "UPDATE orders",
+		"commit": "COMMIT",
+		"":       "query",
+		"\n SELECT count(*) FROM orders WHERE status = 'pending'\n ": "SELECT orders",
+	} {
+		if got := spanName(sql); got != want {
+			t.Errorf("%q: %q, want %q", sql, got, want)
+		}
+	}
+}
+
+// A processed order is one trace: "process order" with its queries under it. The claim and an empty poll are
+// not traced, nor are queries outside a trace.
+func TestProcessTrace(t *testing.T) {
+	db := testDB(t)
+	exp := tracetest.NewInMemoryExporter()
+	prev := otel.GetTracerProvider()
+	otel.SetTracerProvider(sdktrace.NewTracerProvider(sdktrace.WithSyncer(exp)))
+	t.Cleanup(func() { otel.SetTracerProvider(prev) })
+	ctx := context.Background()
+	id, err := Create(ctx, db, 700) // no trace: no span
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := Process(ctx, db, func(context.Context, Order) error { return nil }); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	if _, ok, err := Process(ctx, db, func(context.Context, Order) error { return nil }); ok || err != nil { // empty
+		t.Fatal(ok, err)
+	}
+	var names []string
+	var root tracetest.SpanStub
+	for _, s := range exp.GetSpans() {
+		names = append(names, s.Name)
+		if s.Name == "process order" {
+			root = s
+		}
+	}
+	if fmt.Sprint(names) != "[UPDATE orders COMMIT process order]" {
+		t.Fatalf("spans: %v", names)
+	}
+	for _, s := range exp.GetSpans()[:2] {
+		if s.Parent.SpanID() != root.SpanContext.SpanID() {
+			t.Errorf("%s: not under process order", s.Name)
+		}
+	}
+	if fmt.Sprint(root.Attributes[0]) != fmt.Sprint(attribute.Int64("order.id", id)) {
+		t.Errorf("attributes: %v", root.Attributes)
+	}
+}

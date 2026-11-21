@@ -1,4 +1,5 @@
-// Package obs: the storefront services' metrics (Prometheus text format, no dependency), shaped for SLOs.
+// Package obs: the storefront services' metrics (Prometheus text format, no dependency), shaped for SLOs, and their
+// traces (OpenTelemetry, off unless an OTLP endpoint is configured: Tracing in trace.go).
 //
 //	http_requests_total{route, code, result}       result: ok | degraded | error — the availability SLI counts
 //	                                               result!="ok" as bad (a 200 page without its products is bad)
@@ -23,6 +24,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Buckets: an SLO threshold must be a bucket edge (interpolating between buckets is a guess).
@@ -199,9 +203,10 @@ func Degraded(w http.ResponseWriter) {
 	}
 }
 
-// Instrument records every request of mux under its route pattern. Health checks are not user traffic: skipped.
+// Instrument records every request of mux under its route pattern, and traces it (a server span, a no-op unless
+// Tracing is on; result="degraded" is set on the span too). Health checks are not user traffic: skipped.
 func (m *Metrics) Instrument(mux *http.ServeMux) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return traced(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &recorder{ResponseWriter: w, code: 200}
 		mux.ServeHTTP(rec, r)
@@ -221,7 +226,14 @@ func (m *Metrics) Instrument(mux *http.ServeMux) http.Handler {
 		}
 		m.count("http_requests_total", labels("route", route, "code", strconv.Itoa(rec.code), "result", result))
 		m.observe("http_request_duration_seconds", labels("route", route), time.Since(start))
-	})
+		span := trace.SpanFromContext(r.Context()) // named after the route by otelhttp ("GET /{$}")
+		if _, path, ok := strings.Cut(route, " "); ok {
+			span.SetAttributes(attribute.String("http.route", path))
+		}
+		if result == "degraded" {
+			span.SetAttributes(attribute.String("result", result))
+		}
+	}))
 }
 
 type transport struct {
@@ -242,13 +254,14 @@ func (t transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
-// Client: c, with its calls counted as upstream <name>.
+// Client: c, with its calls counted as upstream <name> and traced (client spans, trace context propagated). The
+// requests must carry the inbound request's context (http.NewRequestWithContext) to join its trace.
 func (m *Metrics) Client(name string, c *http.Client) *http.Client {
 	next := c.Transport
 	if next == nil {
 		next = http.DefaultTransport
 	}
 	cc := *c
-	cc.Transport = transport{m, name, next}
+	cc.Transport = transport{m, name, tracedTransport(name, next)}
 	return &cc
 }

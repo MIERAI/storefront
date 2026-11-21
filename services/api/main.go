@@ -2,12 +2,13 @@
 //
 //	GET /products → [{"id": 1, "name": "…", "price": 120}] (+ "version")
 //	GET /healthz  → ok (header X-App-Version)
-//	:9090 /metrics (internal/obs)
+//	:9090 /metrics (internal/obs); traces (internal/obs Tracing, OTEL_* environment): server spans
 //
 // FAULTS_DIR (internal/fault): products-errors = the share of /products answered 503, for the fault experiments.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -45,6 +46,7 @@ func newMux(version string, faults *fault.Switches) *http.ServeMux {
 
 func main() {
 	version := os.Getenv("APP_VERSION")
+	obs.Tracing(context.Background(), "api", version) // no graceful stop here: the last batch (≤5s of spans) is lost on SIGTERM
 	m := obs.New()
 	m.Serve(":9090")
 	srv := &http.Server{Addr: ":8080", Handler: m.Instrument(newMux(version, fault.New(os.Getenv("FAULTS_DIR"), 2*time.Second))), ReadHeaderTimeout: 5 * time.Second}
