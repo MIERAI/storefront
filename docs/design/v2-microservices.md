@@ -1,6 +1,7 @@
 # storefront v2：微服务化设计书
 
-> 版本 v0.1（2026-11-22）· 状态：**评审中**（本 PR 即设计评审）
+> 版本 v0.2（2026-11-22）· 状态：**评审中**（本 PR 即设计评审）
+> v0.2 的变更：消息中间件改为 RabbitMQ；**先利其器**：api-factory 能生成本系统 95% 的 API 之后再开始开发（工厂侧的计划：api-factory `docs/design/storefront-v2-readiness.md`）；slo-platform 的示例保持 v1。
 > 目的：完整走一遍微服务的开发流程，从需求、设计、实现、测试、发布到运维，并最大化利用现有成果。
 
 ---
@@ -52,7 +53,7 @@
 | ③ 详细设计 | 本设计书第 6–7 节、事件契约（`contracts/`） | 评审通过；契约文件进仓库 | — |
 | ④ 实现 | 每个服务的 PR | CI 绿（单元测试、lint、契约检查） | storefront 的分服务发布 CI、api-factory |
 | ⑤ 单元测试 | 每个服务的 `go test` | 覆盖核心逻辑（状态机、幂等、库存扣减） | 现有 CI |
-| ⑥ 集成测试 | 本地和 CI 里的 Postgres + NATS 集成测试 | 跨服务的用例全部通过 | 现有 CI 的 Postgres 服务容器 |
+| ⑥ 集成测试 | 本地和 CI 里的 Postgres + RabbitMQ 集成测试 | 跨服务的用例全部通过 | 现有 CI 的 Postgres 服务容器 |
 | ⑦ 系统测试 | dev 环境的端到端测试 + 故障实验 + 容量测试 | 第 0 节的四条标准全部过 | slo-platform 实验、capacity.py、winpc 压测机 |
 | ⑧ 发布 | dev → staging → prod 晋级 | 浸泡时间 + 错误预算门槛 | 交付看板、promote 工作流、Argo CD |
 | ⑨ 运维 | SLO、告警、运行手册 | 上线后一周无未解释的告警 | slo-platform、alert-speaker、手机看门狗 |
@@ -154,15 +155,15 @@
 
 **禁止**：服务之间同步地串起一个写操作（比如 order 同步调用 inventory 再同步调用 payment）。这正是"分布式单体"的根源：任何一个慢了，整条链都慢；任何一个挂了，下单就失败。
 
-### 5.2 消息中间件：NATS JetStream
+### 5.2 消息中间件：RabbitMQ（v0.2 决定）
 
 | 候选 | 内存 | 结论 |
 |---|---|---|
-| **NATS JetStream** | 几十 MB | **采用**：轻量、持久化、支持按消费者确认和重投，适合我们紧张的机器 |
-| RabbitMQ | 150MB 以上 | 和工作经验对齐，但太重 |
+| NATS JetStream | 几十 MB | 轻量，但和工作经验无关 |
+| **RabbitMQ** | 150MB 以上 | **采用**（用户决定）：和工作经验对齐（shinise 用的就是它）；交换机 + 队列、发布确认、消费者确认、死信交换机都是成熟的标准做法 |
 | Kafka / Redpanda | 几百 MB 以上 | 对这个规模是过度设计 |
 
-每个环境一个 NATS 实例（单副本，存储用 PVC）。
+**每个集群一个 RabbitMQ 实例，每个环境一个 vhost**（dev、staging、prod 互相隔离），用 RabbitMQ Cluster Operator 部署（GitOps 管理）。单节点，队列用 classic 持久化队列；每个消费队列配死信交换机。发布端用发布确认，消费端处理成功后再确认。
 
 ### 5.3 事件格式（所有事件共用的外层）
 
@@ -262,7 +263,7 @@ sequenceDiagram
 同一个数据库事务：
   INSERT INTO orders …
   INSERT INTO outbox (event_id, type, payload)
-提交事务后，由 outbox 中继把 outbox 里的事件发到 NATS，发成功后标记为已发送
+提交事务后，由 outbox 中继把 outbox 里的事件发到 RabbitMQ，发成功后标记为已发送
 ```
 
 - 不会出现"订单写进去了，事件没发出去"，也不会出现"事件发出去了，订单其实没写进去"。
@@ -304,7 +305,7 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 |---|---|---|
 | S1 | 新建 catalog（`api` 改名并接数据库）；商品数据迁进 `products` 表；查询 API 由 api-factory 生成（或手写，见风险 R1） | 浏览走 catalog；其他不变 |
 | S2 | 新建 order：接管 orders 表（迁到 order 自己的库），web 改为调用 order 的下单 API，不再直接写库；SLO 指标改由 order 导出（order 是常驻服务，不会随 worker 消失） | 下单走 order；worker 暂时保留 |
-| S3 | 引入 NATS 和 outbox；新建 inventory 和 payment；order 实现 saga；**worker 下线** | 完整的 v2 下单流程 |
+| S3 | 引入 RabbitMQ 和 outbox；新建 inventory 和 payment；order 实现 saga；**worker 下线** | 完整的 v2 下单流程 |
 | S4 | 新建 notification；订单历史查询（api-factory） | 全部功能 |
 | S5 | 异步环节的 trace 打通；一致性 SLO；故障实验和容量测试 | 第 0 节四条标准全部验证 |
 
@@ -318,7 +319,7 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 |---|---|---|---|
 | 单元测试 | 状态机的每个转移、补偿逻辑、库存扣减的边界、幂等 | `go test`，纯函数为主 | 每个 PR |
 | 契约测试 | 生产者发出的事件、消费者能处理的事件都符合 `contracts/` | JSON Schema 校验，生产者和消费者两边都测 | 每个 PR |
-| 集成测试 | 单个服务 + 真实的 Postgres 和 NATS：outbox 不丢、重复消息只处理一次 | CI 的服务容器 | 每个 PR |
+| 集成测试 | 单个服务 + 真实的 Postgres 和 RabbitMQ：outbox 不丢、重复消息只处理一次 | CI 的服务容器 | 每个 PR |
 | 端到端测试 | 完整的用户旅程：下单 → 完成 → 通知；库存不足；支付失败 | dev 环境，k6 脚本 | 发布到 dev 之后 |
 | 故障实验 | 第 0 节的"故障隔离"和"最终一致"（实验清单见 11.3） | slo-platform 实验运行器，每天回归 | lab，回归时段 |
 | 容量测试 | 平时的拐点、秒杀的拐点、扩容的效果 | capacity.py，从 winpc 发起 | lab，回归时段外 |
@@ -362,7 +363,7 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 |---|---|
 | inventory 全部宕机 10 分钟 | 浏览可用性不受影响；下单照常受理；订单停在 RESERVING，恢复后全部继续推进；不告警"浏览"相关的 SLO |
 | payment 全部宕机 10 分钟 | 同上；恢复后 5 分钟内全部到达终态；不重复扣款 |
-| NATS 宕机 5 分钟 | outbox 积压上升，恢复后排空；没有事件丢失 |
+| RabbitMQ 宕机 5 分钟 | outbox 积压上升，恢复后排空；没有事件丢失 |
 | 同一条命令被投递两次 | 只扣一次款、只预留一次库存 |
 | 发布 catalog 的新版本 | 其他服务零重启；用户旅程 SLO 不受影响 |
 | 秒杀（容量测试） | 不超卖；找到拐点；扩容 order 和 inventory 后拐点提高 |
@@ -378,9 +379,9 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 | 项 | 每个环境 | 说明 |
 |---|---|---|
 | 6 个 Go 服务 × 2 副本 | 约 12 × 20MB = 240MB | Go 服务很省内存（现有 web 约 11MB） |
-| NATS | 约 30–50MB | 单副本 |
+| RabbitMQ | 约 150MB / **集群**（不是每个环境） | 每个环境一个 vhost |
 | Postgres | 沿用现有的 CNPG 集群，只是多建几个库 | 不增加实例 |
-| **合计增加** | 约 300MB / 环境 | |
+| **合计增加** | 约 250MB / 环境 + 150MB / 集群 | |
 
 - **笔记本**（dev + staging + prod）：增加约 900MB，内存余量充足（目前已申请的内存约 34%）。
 - **小新**（lab）：增加约 900MB **放不下**。lab 只保留一套完整的 v2（或者只保留 prod 等价环境），dev 和 staging 在 lab 上缩到最小。这件事要在 Prometheus 减肥之后决定。
@@ -410,10 +411,10 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 | 里程碑 | 内容 | 过关条件 |
 |---|---|---|
 | **M0 设计评审** | 本设计书 + 事件契约草案 | 你的评审通过 |
-| **M1 预研（风险 R1）** | api-factory 能否给 storefront 的 catalog 库生成查询服务 | 生成出来的服务能连 catalog 库、通过验收；做不到就决定手写 |
+| **M1 工厂就绪（先利其器）** | api-factory 补齐能力：第二个项目、JOIN、聚合、命令工厂（写入、事件、消息处理器、状态机）。计划和分母（28 个 API）见 api-factory `docs/design/storefront-v2-readiness.md` | 工厂能生成本系统 API 的 **95% 以上**（28 个里至少 27 个）并通过工厂的验证 |
 | **M2 catalog（S1）** | catalog 服务 + 库 + 迁移 + 部署 + SLO | dev → prod 上线，浏览 SLO 连续 |
 | **M3 order（S2）** | order 接管订单，web 不再直接写库 | 下单 SLO 连续，worker 仍在 |
-| **M4 saga（S3）** | NATS、outbox、inventory、payment、saga，worker 下线 | 端到端测试通过：成功、库存不足、支付失败三条路径 |
+| **M4 saga（S3）** | RabbitMQ、outbox、inventory、payment、saga，worker 下线 | 端到端测试通过：成功、库存不足、支付失败三条路径 |
 | **M5 收尾（S4）** | notification、订单历史查询 | 全部功能需求（F1–F8）完成 |
 | **M6 验证（S5）** | 追踪打通、一致性 SLO、故障实验、容量测试 | 第 0 节四条标准全部通过 |
 | **M7 复盘** | 复盘文档、博客 | — |
@@ -426,13 +427,10 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 
 | # | 风险或问题 | 应对 |
 |---|---|---|
-| **R1** | api-factory 现在是"一个仓库、一个服务、一个库"，能否给 storefront 的 catalog 库单独生成服务，尚不清楚 | M1 先做预研，时间盒控制在 1 天；做不到就手写查询接口（很简单），把"支持第二个项目"记为 api-factory 的待办 |
+| **R1** | api-factory 的能力缺口很大（现在只能生成 28 个 API 中的 0 个，补上"第二个项目"后 7 个） | **v0.2 决定：先利其器**，M1 把工厂补到 95% 再开发（见 M1） |
 | R2 | 小新内存不够放完整的 v2 | lab 只保留一套环境；先做 Prometheus 减肥 |
 | R3 | Tempo 放在哪里（小新内存紧，放笔记本等于改生产） | M6 之前决定 |
-| R4 | slo-platform 产品里的 storefront 示例要不要跟着升级 | **不升级**：示例保持 v1 的简单形态，v2 只在我们自己的实例里 |
-| R5 | api-factory 配置里的本地模型仍是 qwen3.6:35b（winpc 已换成 gemma4:12b） | 和本项目无关，记一笔，以后更新 |
+| R4 | slo-platform 产品里的 storefront 示例要不要跟着升级 | **不升级**（v0.2 决定）：示例保持 v1 的简单形态，v2 只在我们自己的实例里 |
+| R5 | ~~api-factory 配置里的本地模型仍是 qwen3.6:35b~~ | 已处理：工厂只用 Claude（api-factory #18） |
 
-**需要你决定的：**
-1. 第 0 节的四条成功标准和第 3 节的需求，范围合适吗？要加或者删什么？
-2. 消息中间件用 NATS（轻量），还是想用 RabbitMQ（和工作经验对齐，但重很多）？
-3. 第 15 节 R4：slo-platform 的示例保持 v1，同意吗？
+**已决定（v0.2）：** ① 范围按第 0、3 节；② 消息中间件用 RabbitMQ；③ slo-platform 的示例保持 v1；④ 先把工厂补到 95% 再开发。
