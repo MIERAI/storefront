@@ -1,5 +1,6 @@
 # storefront v2：微服务化设计书
 
+> 版本 v0.3（2026-11-22）· v0.3：与 api-factory 的 R4 / R5 设计对齐（`docs/design/r4-events-messages.md`、`r5-state-machines.md`，用户 2026-11-22 全部按推荐批准）：状态存订单行、没有 PENDING、消息 id 用 UUIDv7、RESERVING 15 分钟期限、预留过期 24 小时、补上 committed / released 事件
 > 版本 v0.2（2026-11-22）· 状态：**评审中**（本 PR 即设计评审）
 > v0.2 的变更：消息中间件改为 RabbitMQ；**先利其器**：api-factory 能生成本系统 95% 的 API 之后再开始开发（工厂侧的计划：api-factory `docs/design/storefront-v2-readiness.md`）；slo-platform 的示例保持 v1。
 > 目的：完整走一遍微服务的开发流程，从需求、设计、实现、测试、发布到运维，并最大化利用现有成果。
@@ -124,7 +125,7 @@
 | **web**（BFF） | 页面、对外入口、聚合下游数据 | 无（无状态） | 现有，改造 |
 | **catalog** | 商品、价格 | `products` | 读：**api-factory 生成**；写：手写的管理接口 |
 | **inventory** | 库存数量、预留、扣减、释放 | `stock`、`reservations` | 手写 |
-| **order** | 订单、下单流程的编排（saga） | `orders`、`order_items`、`saga_state` | 手写；订单历史查询由 **api-factory 生成** |
+| **order** | 订单、下单流程的编排（saga） | `orders`、`order_items`（saga 的状态存在订单行上：status、updated_at、version、state_attempts） | 手写；订单历史查询由 **api-factory 生成** |
 | **payment** | 模拟支付（可以通过故障开关让它失败或变慢） | `payments` | 手写 |
 | **notification** | 订单完成或取消时发通知（第一版只写日志和指标） | `notifications`（发送记录，用于去重） | 手写 |
 
@@ -169,7 +170,7 @@
 
 ```json
 {
-  "id": "evt_01J…",              // 全局唯一，用于消费者去重
+  "id": "0193…",                 // UUIDv7,全局唯一,用于消费者去重(超时重发的命令用新 id,处理器必须可重入)
   "type": "order.created",
   "version": 1,                   // 契约版本
   "occurred_at": "2026-…Z",       // 事件发生的时间（不是发送时间）
@@ -194,6 +195,7 @@
 | `payment.succeeded` / `payment.failed` | 事件 | payment | order |
 | `inventory.release` | 命令（补偿） | order | inventory |
 | `inventory.commit` | 命令（确认扣减） | order | inventory |
+| `inventory.committed` / `inventory.released` | 事件（确认 / 补偿完成） | inventory | order |
 | `order.confirmed` / `order.cancelled` | 事件 | order | notification、web（订单状态） |
 
 ---
@@ -211,8 +213,7 @@
 
 ```mermaid
 stateDiagram-v2
-    [*] --> PENDING: 下单
-    PENDING --> RESERVING: 发 inventory.reserve
+    [*] --> RESERVING: 下单(写订单 + 发 inventory.reserve,同一事务)
     RESERVING --> CHARGING: inventory.reserved / 发 payment.charge
     RESERVING --> CANCELLED: inventory.reservation_failed（库存不足）
     CHARGING --> CONFIRMING: payment.succeeded / 发 inventory.commit
@@ -235,7 +236,7 @@ sequenceDiagram
     participant N as notification
     U->>W: POST /orders
     W->>O: 创建订单（同步，只写本地库 + outbox）
-    O-->>W: 订单号（状态 PENDING）
+    O-->>W: 订单号（状态 RESERVING）
     W-->>U: 202 已受理 + 订单号
     O--)I: inventory.reserve
     I--)O: inventory.reserved
@@ -250,7 +251,7 @@ sequenceDiagram
 
 ### 6.4 超时和卡住的订单
 
-- 每个等待中的状态都有超时（比如 RESERVING 等 30 秒）。超时后重发命令（命令是幂等的，重发安全）；超过最大重试次数，进入补偿流程。
+- 等待中的状态 30 秒没有回应就重发命令（之后每 60 秒一次；命令的处理器可重入，重发安全）。**只有 RESERVING 有期限**：15 分钟后进入补偿（取消订单）。CHARGING 不自动补偿：扣款结果不明时不能自动退回，进入人工处理（死信 + 告警）。超时扫描在 order 服务的进程里运行。
 - order 定时扫描"在某个状态停留太久"的订单，导出成指标：**卡住的订单数**和**最老的卡住时长**。这两个指标就是"每笔订单 5 分钟内到达终态"这条 SLO 的数据来源。
 
 ---
@@ -288,7 +289,7 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 -- 影响 0 行 = 库存不足 → 发 inventory.reservation_failed
 ```
 
-- 预留有过期时间：订单卡住没有确认的预留，到期自动释放，防止库存被永久占用。
+- 预留有过期时间（**24 小时**，只作安全网）：订单卡住没有确认的预留，到期自动释放。期限远长于 RESERVING 的 15 分钟，避免"钱扣了、库存却被放掉"；万一仍然发生，进入人工处理。释放时如果预留还不存在，留下一条"已释放"的记录（墓碑），挡住之后迟到的预留。
 - 秒杀时，热点商品的这一行会成为争抢点。容量测试要找的正是这里的拐点，然后对比"加大连接池""对热点 SKU 的请求排队"等方案的效果。
 
 ### 7.5 数据库迁移
