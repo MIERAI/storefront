@@ -1,5 +1,6 @@
 # storefront v2：微服务化设计书
 
+> 版本 v0.4.1（2026-11-23）· v0.4.1：S1 晋级到 staging（§14 进度、§14.1 状态）；prod 待批准
 > 版本 v0.4（2026-11-23）· v0.4：M1 完成（28 / 29）；M2（S1 catalog）在 dev 上线，staging / prod 待晋级；§14.1 记录 S1 的实施决定和晋级步骤
 > 版本 v0.3（2026-11-22）· v0.3：与 api-factory 的 R4 / R5 设计对齐（`docs/design/r4-events-messages.md`、`r5-state-machines.md`，用户 2026-11-22 全部按推荐批准）：状态存订单行、没有 PENDING、消息 id 用 UUIDv7、RESERVING 15 分钟期限、预留过期 24 小时、补上 committed / released 事件
 > 版本 v0.2（2026-11-22）· 状态：**评审中**（本 PR 即设计评审）
@@ -429,7 +430,7 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 |---|---|
 | M0 | ✅ 本设计书 v0.3 批准（#8、#9） |
 | M1 | ✅ **28 / 29（97%）**，过关线 95%（R1–R5 + R4.1；api-factory `docs/design/storefront-v2-readiness.md` v0.7）。分母从 28 变成 29：端到端骨架发现少了"商品登记时建库存记录"（M13）。剩下 J1（批量任务，R6）。catalog 项目：327 个验收用例（人写 21 / 自动 68 / 差分 238），手写只有 `main.go` + 迁移 |
-| M2 | 🟡 **dev 已上线（笔记本 + 小新），staging / prod 待晋级（用户批准）**：storefront #10（catalog）、#11（web 走 catalog）；gitops-manifests #123（catalog 应用）、#124（dev 的 web 设 `CATALOG_URL`）。过关条件"dev → prod 上线，浏览 SLO 连续"还差晋级 |
+| M2 | 🟡 **dev + staging 已上线，prod 待晋级（用户批准）**：storefront #10（catalog）、#11（web 走 catalog）；gitops-manifests #123（catalog 应用）、#124（dev 的 web 设 `CATALOG_URL`）、#125（catalog 的库备份）、#126（catalog staging）、#128（web `ccab018` 晋级 staging）、#129（staging 的 web 设 `CATALOG_URL`）；infrastructure-live #30 / #31（`backup-s3`）。过关条件"dev → prod 上线，浏览 SLO 连续"还差 prod |
 | M3–M7 | 未开始 |
 
 ### 14.1 M2 / S1 的实施决定（2026-11-23）
@@ -445,7 +446,9 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 | web 是 BFF：按分类调 `ListProducts` | `CATALOG_CATEGORIES`（默认 `coffee,goods`） | ListProducts 必须指定分类；没有"全部在售商品"或"分类一览"的 API（要的话加一个设计） |
 | 小新的同步窗口 | 应用名 `catalog-*` **不在**窗口里 | 回归暂停中，catalog 立刻上 lab；恢复回归、实验指向 v2 时，把 `catalog-*` 加进 `platform/sync-window-lab` |
 
-**S1 的晋级步骤（等用户批准；dev 已验证）**：
+**S1 的晋级步骤（dev 已验证；staging 2026-11-23 用户批准并完成，prod 等用户批准）**：
+
+> 状态（2026-11-23）：第 1 步 ✅（gitops-manifests #125，infrastructure-live #30）。第 2 步 **只做了 staging** ✅：gitops-manifests #126（`catalog-staging`，前缀 `s3://cnpg/catalog-staging`；`backup-s3` 来自 infrastructure-live #31，先于 gitops 合并 apply），笔记本和小新各一套（接受小新多一个小环境），两边 WAL 归档 + 首个 base backup 完成。第 3 步 staging ✅：web `ccab018` 经 promote 工作流晋级 staging（#128，浸泡 5 分钟），再由 #129 给 `storefront/overlays/staging` 加 `CATALOG_URL`；staging 页面显示 `web ccab018 · catalog 3182342`，v1 的下单不受影响。回滚 = revert #129。prod（catalog-prod、web 晋级 prod、prod 的 `CATALOG_URL`）未做。
 
 1. **prod 之前先给 catalog 的库加备份**（gitops-manifests `catalog/base/postgres.yaml`：barman-cloud 插件 + ObjectStore + ScheduledBackup，照 api-factory；之后运营改的价格只存在这里）。只改 catalog，一个 PR。
 2. gitops-manifests 一个 PR：`catalog/app.yaml` 的 `environments` 加 `staging`（`promotion: { from: dev, soak: 5m }`）和 `prod`（`promotion: { from: staging, soak: 10m }`），加 `catalog/overlays/staging`、`overlays/prod`（复制 dev，namespace 和 NetworkPolicy 的 env 改掉，镜像 tag = dev 现在的 `3182342`）。**注意**：这会在两个集群上都建出 catalog-staging / catalog-prod（slo-platform 没有"按集群选环境"）；小新只要一套的话，先在 slo-platform 加这个功能（release/0.1 的补丁版，**先升版本、下一个提交再用新键**），或者接受小新上多两个小环境（每个约 100MB requests）。渲染前后对比：笔记本只多出 catalog-staging / catalog-prod。
