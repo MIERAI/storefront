@@ -1,0 +1,31 @@
+# Fault isolation (design §0, §11.3): inventory completely down for 10 minutes, under browse + order load.
+# A template: run-experiment.sh fills ${NAMESPACE} and ${QUIET} (the browse SLOs that must not page) and runs the
+# result with slo-platform's scripts/experiment.py. The fault ends by itself (Chaos Mesh spec.duration) even if the
+# runner dies.
+hypothesis: >-
+  Every inventory pod fails for 10 minutes (Chaos Mesh pod-failure: the container is replaced by a pause image, so the
+  pod is not ready and nothing consumes inventory's queues). Browsing only needs catalog: its availability stays at or
+  above 99.5% and its SLOs do not page. Placing an order only writes order's own database (design §6.3): orders keep
+  being accepted. The saga's inventory.reserve commands wait in RabbitMQ (and are re-sent every 60s, idempotently);
+  orders stay in RESERVING — under the 15-minute deadline, so none is cancelled for it — and all move on to a final
+  state once inventory is back. Pages that may come: order's completion / journey SLOs (orders completing late after
+  the recovery), inventory's own SLOs. Measured by scripts/m6 (check.py isolation), not only by alerts.
+namespace: ${NAMESPACE}
+fault:
+  - apiVersion: chaos-mesh.org/v1alpha1
+    kind: PodChaos
+    metadata: { name: m6-inventory-down }
+    spec:
+      action: pod-failure
+      mode: all
+      selector: { labelSelectors: { app: inventory } }
+      duration: 10m
+effect: { query: 'sum(kube_deployment_status_replicas_available{namespace="${NAMESPACE}", deployment="inventory"}) == 0', within: 3m }
+timeout: 10m
+hold: 10m
+expect:
+  fire: []
+  quiet: ${QUIET}
+  may_fire:
+    - { alert: ErrorBudgetBurn, labels: { namespace: "${NAMESPACE}" } }
+recover: 10m

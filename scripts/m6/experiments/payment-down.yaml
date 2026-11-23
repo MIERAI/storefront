@@ -1,0 +1,29 @@
+# Eventual consistency (design §0, §11.3): payment completely down for 10 minutes, under order load.
+# A template: run-experiment.sh fills ${NAMESPACE} and ${QUIET} and runs it with slo-platform's scripts/experiment.py.
+hypothesis: >-
+  Every payment pod fails for 10 minutes (Chaos Mesh pod-failure). Orders keep being accepted and reserved; they wait in
+  CHARGING (no deadline there by design: a charge whose outcome is unknown is never undone automatically), and the saga
+  re-sends payment.charge every 60s into the queue. When payment is back it works through the queue; its idempotency
+  (payments.order_id is the primary key) answers every re-sent charge with the first result, and the saga ignores the
+  late answers. Within 5 minutes of the recovery every order created before it is CONFIRMED or CANCELLED, no order is
+  charged twice, no cancelled order keeps a charge, and no SKU is oversold. Browsing does not page. Pages that may
+  come: order's completion / journey SLOs, payment's own SLOs. Measured by scripts/m6 (check.py consistency).
+namespace: ${NAMESPACE}
+fault:
+  - apiVersion: chaos-mesh.org/v1alpha1
+    kind: PodChaos
+    metadata: { name: m6-payment-down }
+    spec:
+      action: pod-failure
+      mode: all
+      selector: { labelSelectors: { app: payment } }
+      duration: 10m
+effect: { query: 'sum(kube_deployment_status_replicas_available{namespace="${NAMESPACE}", deployment="payment"}) == 0', within: 3m }
+timeout: 10m
+hold: 10m
+expect:
+  fire: []
+  quiet: ${QUIET}
+  may_fire:
+    - { alert: ErrorBudgetBurn, labels: { namespace: "${NAMESPACE}" } }
+recover: 10m
