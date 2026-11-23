@@ -134,6 +134,20 @@ Finally `./expose.py down`.
 - The capacity numbers hold for *this* lab node (4 cores, 7 GB, Argo CD / Prometheus / k3s as neighbours; see the
   report's neighbour CPU). The 2× promise is about the ratio, measured on the same node within the hour.
 
+## Results, 2026-11-23 (first run)
+
+| Promise | Verdict | Numbers |
+|---|---|---|
+| Independent deploy | **PASS** (run 2) | payment `ef9c9b8 → 43542ad` through release-payment + promote; 0 other workloads changed, 0 pods replaced, 0 restarts; journey 100% of 453 orders final ≤ 60 s; catalog RPCs 100% of 4530, order 100% of 452 (+1359 messages), inventory / notification messages 100%; users: browse 100%, orders 99.81% (1 of 524 timed out at 12:19:37, before the release — the warm-up stall on the winpc → lab path); no new page |
+| Independent deploy | FAIL (run 1, kept) | same isolation (0 changed / replaced / restarted), but journey 73% ≤ 60 s: RabbitMQ's memory alarm (watermark 160 MiB < its idle size) blocked publishers ~40× in 90 min. Fixed in gitops-manifests #132 (watermark 300 MiB) and #133 (the restart that followed crash-looped on the Erlang cookie's permissions — a latent defect) |
+| Fault isolation | **not run** | the fault injection (Chaos Mesh pod-failure on inventory) was refused by this session's permission policy; tooling ready (`run-experiment.sh inventory-down --preflight` passes) |
+| Eventual consistency | **not run** | same (payment-down) |
+| Independent scaling | **not demonstrated** | 1 replica: holds 10/s, 20/s once (failed its confirm run), breaks 25/s; order + inventory ×3: holds 20/s twice, breaks 25/s. `check.py scaling` prints 2.00× only because the baseline's 20/s was unstable; both break at 25/s on "saga keeps up" with the node at ~99% of its 8 threads and the single Postgres at 1.8 cores (5 databases, ~10 transactions per order). On this node the limit is the shared CPU and the database, not order / inventory |
+| No oversell (flash sale) | **PASS** | 1201 orders accepted for 200 units of M6-SCARCE (30/s × 40 s): exactly 200 committed / 200 CONFIRMED, 1001 CANCELLED, books balance, 0 lost, 0 double charges |
+
+Also found: Prometheus 3 writes integer histogram bucket edges as `le="60.0"` (fixed here, in flash_app and in the
+consistency SLO); `winpc.sh stop` could leave a k6 running (fixed).
+
 ## Known limits
 
 - The outbox relay is one leader per database, and order's saga timeout scanner adds a round every few seconds:
