@@ -1,5 +1,6 @@
 # storefront v2：微服务化设计书
 
+> 版本 v0.4（2026-11-23）· v0.4：M1 完成（28 / 29）；M2（S1 catalog）在 dev 上线，staging / prod 待晋级；§14.1 记录 S1 的实施决定和晋级步骤
 > 版本 v0.3（2026-11-22）· v0.3：与 api-factory 的 R4 / R5 设计对齐（`docs/design/r4-events-messages.md`、`r5-state-machines.md`，用户 2026-11-22 全部按推荐批准）：状态存订单行、没有 PENDING、消息 id 用 UUIDv7、RESERVING 15 分钟期限、预留过期 24 小时、补上 committed / released 事件
 > 版本 v0.2（2026-11-22）· 状态：**评审中**（本 PR 即设计评审）
 > v0.2 的变更：消息中间件改为 RabbitMQ；**先利其器**：api-factory 能生成本系统 95% 的 API 之后再开始开发（工厂侧的计划：api-factory `docs/design/storefront-v2-readiness.md`）；slo-platform 的示例保持 v1。
@@ -421,6 +422,36 @@ UPDATE stock SET available = available - $qty, reserved = reserved + $qty
 | **M7 复盘** | 复盘文档、博客 | — |
 
 每个里程碑一个或几个 PR，都走 CI 和晋级流程。
+
+**进度（2026-11-23）**
+
+| 里程碑 | 状态 |
+|---|---|
+| M0 | ✅ 本设计书 v0.3 批准（#8、#9） |
+| M1 | ✅ **28 / 29（97%）**，过关线 95%（R1–R5 + R4.1；api-factory `docs/design/storefront-v2-readiness.md` v0.7）。分母从 28 变成 29：端到端骨架发现少了"商品登记时建库存记录"（M13）。剩下 J1（批量任务，R6）。catalog 项目：327 个验收用例（人写 21 / 自动 68 / 差分 238），手写只有 `main.go` + 迁移 |
+| M2 | 🟡 **dev 已上线（笔记本 + 小新），staging / prod 待晋级（用户批准）**：storefront #10（catalog）、#11（web 走 catalog）；gitops-manifests #123（catalog 应用）、#124（dev 的 web 设 `CATALOG_URL`）。过关条件"dev → prod 上线，浏览 SLO 连续"还差晋级 |
+| M3–M7 | 未开始 |
+
+### 14.1 M2 / S1 的实施决定（2026-11-23）
+
+| 决定 | 内容 | 理由 |
+|---|---|---|
+| **新服务 + 配置切换**，不是原地把 `api` 改名 | 新建 `services/catalog`；web 有 `CATALOG_URL` 就走 catalog，没有就走 v1 的 api。`services/api` 在 catalog 上了 prod 之后删除 | staging / prod 的 overlay 固定着 v1 的 api 镜像；同一个 web 镜像在 dev 走 catalog、在 staging / prod 走 api，晋级 web 不依赖 catalog 已经在那个环境 |
+| catalog 是**独立的应用**（gitops-manifests `catalog/app.yaml`，namespace `catalog-<env>`） | 不是 storefront 应用的组件 | v2 的服务各自部署、晋级、拥有（§4）；集群按应用选择（小新排除 v1 的 storefront，但运行 catalog） |
+| catalog **自己的 CNPG 实例**（库和账号 `catalog`） | 偏离 §12 的"沿用现有的 CNPG 集群" | Pod 只能读自己 namespace 的 Secret；跨 namespace 复制角色密码在小新上没有手段（没有 Kyverno / 密钥 operator），也不能写进公开仓库。一个小实例实测约 50MB（catalog 两个副本合计约 12MB；小新节点 70% → 73%）。S2 时如果内存紧，再考虑"每个环境一个共享集群 + 密钥 operator" |
+| 迁移：goose，**嵌进服务的二进制**（`/server migrate up`，init container 用同一个镜像） | `services/catalog/internal/migrations`：00001 表、00002 工厂的平台表、00003 v1 的 3 个商品（数据迁移） | 工厂的打包模板还没有迁移（api-factory GAPS G24）；生成的 Dockerfile 只复制 `cmd/ gen/ internal/`。CI 检查：只追加、迁移 == `db/schema`、重跑不再执行 |
+| 认证：`AUTH_MODE=none` + NetworkPolicy | 8080 只放行同环境的 web、本 namespace、monitoring | 运行时的认证是整个服务一个开关（读写不分）；写接口（F7 管理画面）出现时再上令牌 |
+| 工厂作为工具**钉在一个提交**（`scripts/factory.sh`，7749483） | CI：生成物最新、工厂的验收；**式样书审查不进 CI** | 审查调用模型（公开仓库的 CI 要放凭证）且不确定；改设计时在本地跑，回答（`*.审查.yaml`）提交 |
+| web 是 BFF：按分类调 `ListProducts` | `CATALOG_CATEGORIES`（默认 `coffee,goods`） | ListProducts 必须指定分类；没有"全部在售商品"或"分类一览"的 API（要的话加一个设计） |
+| 小新的同步窗口 | 应用名 `catalog-*` **不在**窗口里 | 回归暂停中，catalog 立刻上 lab；恢复回归、实验指向 v2 时，把 `catalog-*` 加进 `platform/sync-window-lab` |
+
+**S1 的晋级步骤（等用户批准；dev 已验证）**：
+
+1. **prod 之前先给 catalog 的库加备份**（gitops-manifests `catalog/base/postgres.yaml`：barman-cloud 插件 + ObjectStore + ScheduledBackup，照 api-factory；之后运营改的价格只存在这里）。只改 catalog，一个 PR。
+2. gitops-manifests 一个 PR：`catalog/app.yaml` 的 `environments` 加 `staging`（`promotion: { from: dev, soak: 5m }`）和 `prod`（`promotion: { from: staging, soak: 10m }`），加 `catalog/overlays/staging`、`overlays/prod`（复制 dev，namespace 和 NetworkPolicy 的 env 改掉，镜像 tag = dev 现在的 `3182342`）。**注意**：这会在两个集群上都建出 catalog-staging / catalog-prod（slo-platform 没有"按集群选环境"）；小新只要一套的话，先在 slo-platform 加这个功能（release/0.1 的补丁版，**先升版本、下一个提交再用新键**），或者接受小新上多两个小环境（每个约 100MB requests）。渲染前后对比：笔记本只多出 catalog-staging / catalog-prod。
+3. catalog 在 staging / prod 健康之后：web 晋级 dev → staging → prod（交付看板 / promote 工作流，`image: ghcr.io/mierai/storefront-web`，版本 `ccab018` 或之后的；它不带 `CATALOG_URL` 时行为和 v1 一样，可以先晋级），然后 gitops-manifests 一个 PR 给 `storefront/overlays/staging` 加 `CATALOG_URL=http://catalog.catalog-staging.svc:8080`，浸泡后再一个 PR 给 prod 加 `…catalog-prod…`。每一步看 web-availability / web-latency（浏览 SLO 连续）和 catalog 的 browse-availability / browse-latency。
+4. 回滚：删掉那个环境的 `CATALOG_URL`（revert PR），web 回到 v1 的 api。
+5. prod 稳定之后（S1 收尾）：storefront 删 `services/api`、`release-api`；gitops-manifests 删 api 的 Deployment / Service / SLO（api-availability、api-latency）和 `services: api`；capacity 的 `workloads` 改成 web + catalog。
 
 ---
 
