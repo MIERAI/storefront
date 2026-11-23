@@ -1,0 +1,21 @@
+# 由设计编译器维护,不要手改。proto 的字段编号对外发布后不能变: 只追加,删掉的字段编号保留(reserved)
+字段编号:
+    ListNotificationsByOrderRequest:
+        order_id: 1
+    ListNotificationsByOrderResponse:
+        notifications: 1
+    Notification:
+        event_id: 1
+        kind: 2
+        sent_at: 3
+    NotificationKind:
+        NOTIFICATION_KIND_ORDER_CANCELLED: 2
+        NOTIFICATION_KIND_ORDER_CONFIRMED: 1
+    RecordOrderCancelledRequest:
+        customer_id: 2
+        order_id: 1
+        reason: 3
+    RecordOrderConfirmedRequest:
+        customer_id: 2
+        order_id: 1
+        total: 3

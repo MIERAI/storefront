@@ -1,0 +1,68 @@
+# ============================================================================
+# ChargePayment: 收到 payment.charge → 模拟扣款(M10;消息处理器: 幂等新建 + 如果 + 按存下来的结果分支)
+# ============================================================================
+API: ChargePayment
+说明: 给一个订单扣款(模拟的支付网关,超过 10 万就拒绝),回答 payment.succeeded 或 payment.failed。同一个订单再来时按第一次的结果回答
+背景: saga 的扣款命令至少投递一次,超时还会重发(新 id)。订单号是幂等键,重复的扣款请求不能扣两次,而且要得到第一次的结果
+负责人: storefront
+风险: 高
+
+种类: 消息处理
+收到: payment.charge
+
+操作:
+  - 支付:
+      幂等新建: payments
+      键: [order_id]
+      值:
+        order_id: 消息.order_id
+        amount: 消息.amount
+        status: "如果 消息.amount > 100000 则 FAILED 否则 SUCCEEDED"
+        reason: "如果 消息.amount > 100000 则 'LIMIT_EXCEEDED' 否则 空"
+
+结果:
+  成功:
+    - 当: "支付.status = SUCCEEDED"
+      发出:
+        - payment.succeeded: { order_id: 支付.order_id, amount: 支付.amount }
+    - 否则: 是
+      发出:
+        - payment.failed: { order_id: 支付.order_id, reason: 支付.reason }
+
+业务规则:
+  - 情况: 金额 10 万以下
+    结果: 扣款成功(记录 SUCCEEDED),发出 payment.succeeded
+  - 情况: 金额超过 10 万
+    结果: 拒绝(记录 FAILED,原因 LIMIT_EXCEEDED),发出 payment.failed
+  - 情况: 同一个订单再来(重投 / 重发,金额可能不同)
+    结果: 不再扣款,按第一次存下来的结果回答(金额、结果都是第一次的)
+
+例子:
+  准备数据:
+    payments:
+      - { order_id: 5, amount: "200000", status: FAILED, reason: LIMIT_EXCEEDED, created_at: "2026-11-21 09:00" }
+  用例:
+    - 说明: 10 万以下 → 成功
+      消息: { order_id: 7, amount: "4500.50" }
+      结果: 成功
+      发出:
+        - payment.succeeded: { order_id: 7, amount: "4500.50" }
+      之后:
+        payments:
+          - { order_id: 5, status: FAILED }
+          - { order_id: 7, amount: "4500.50", status: SUCCEEDED, reason: $absent }
+    - 说明: 超过 10 万 → 拒绝
+      消息: { order_id: 8, amount: "100000.01" }
+      结果: 成功
+      发出:
+        - payment.failed: { order_id: 8, reason: LIMIT_EXCEEDED }
+      之后:
+        payments:
+          - { order_id: 5, status: FAILED }
+          - { order_id: 8, amount: "100000.01", status: FAILED, reason: LIMIT_EXCEEDED }
+    - 说明: 同一个订单再来(这次金额小)→ 按第一次的结果(失败)回答
+      消息: { order_id: 5, amount: "1" }
+      结果: 成功
+      发出:
+        - payment.failed: { order_id: 5, reason: LIMIT_EXCEEDED }
+      之后: 不变

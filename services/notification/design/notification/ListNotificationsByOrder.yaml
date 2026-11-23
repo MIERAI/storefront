@@ -1,0 +1,35 @@
+# ListNotificationsByOrder: 某个订单的通知记录
+API: ListNotificationsByOrder
+说明: 返回某个订单发出过的通知,按发出时间排序
+背景: 订单详情页、确认通知没有重复发送。一个订单的通知只有几条
+负责人: storefront
+风险: 低
+
+种类: 多条
+数据来源: notifications
+
+输入:
+  order_id: { 类型: 整数64, 必填: 是, 范围: "> 0", 说明: 订单号, 筛选: order_id 等于 }
+
+输出:
+  event_id: 事件 ID
+  kind:     通知的种类
+  sent_at:  发出的时间
+
+排序: [sent_at 旧到新, event_id 小到大]
+上限: 20
+输出行名: Notification
+
+例子:
+  准备数据:
+    notifications:
+      - { event_id: "e-2", order_id: 101, kind: ORDER_CANCELLED, sent_at: "2026-11-01 09:10" }
+      - { event_id: "e-1", order_id: 101, kind: ORDER_CONFIRMED, sent_at: "2026-11-01 09:00" }
+      - { event_id: "e-3", order_id: 102, kind: ORDER_CONFIRMED, sent_at: "2026-11-01 09:00" }
+  用例:
+    - 说明: 某个订单的通知,按发出时间排序
+      输入: { order_id: 101 }
+      结果: { notifications: [{ event_id: "e-1", kind: ORDER_CONFIRMED }, { event_id: "e-2", kind: ORDER_CANCELLED }] }
+    - 说明: 没有通知的订单
+      输入: { order_id: 999 }
+      结果: { notifications: [] }

@@ -54,5 +54,7 @@ if diff <(dump from_schema) <(dump from_migrations) > "$work/drift.diff"; then
 else
   echo "✗ schema drift: $dir and $svc/db/schema differ (< db/schema, > migrations):"; head -40 "$work/drift.diff"; exit 1
 fi
-# data migrations: what the database holds afterwards (the log of a CI run shows it)
-psql -d from_migrations -c "SELECT sku, name, category, price, status, version FROM products ORDER BY sku"
+# data migrations: what the database holds afterwards (the log of a CI run shows it). Only catalog has one (00003)
+if [[ $svc == services/catalog ]]; then
+  psql -d from_migrations -c "SELECT sku, name, category, price, status, version FROM products ORDER BY sku"
+fi

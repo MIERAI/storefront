@@ -1,0 +1,68 @@
+# 由设计编译器维护,不要手改。proto 的字段编号对外发布后不能变: 只追加,删掉的字段编号保留(reserved)
+字段编号:
+    AdjustStockRequest:
+        delta: 2
+        reason: 3
+        sku: 1
+    AdjustStockResponse:
+        adjusted_at: 6
+        adjustment_id: 5
+        available: 2
+        reserved: 3
+        sku: 1
+        version: 4
+    AdjustmentReason:
+        ADJUSTMENT_REASON_DAMAGED: 3
+        ADJUSTMENT_REASON_RECEIVED: 1
+        ADJUSTMENT_REASON_STOCKTAKE: 2
+    CommitStockItem:
+        qty: 2
+        sku: 1
+    CommitStockRequest:
+        items: 2
+        order_id: 1
+    GetStockRequest:
+        sku: 1
+    GetStockResponse:
+        available: 1
+        found: 3
+        reserved: 2
+    InitStockRequest:
+        sku: 1
+    InventoryCommittedV1:
+        order_id: 1
+    InventoryReleasedV1:
+        order_id: 1
+    InventoryReservationFailedV1:
+        order_id: 1
+        reason: 2
+    InventoryReservedV1:
+        items: 2
+        order_id: 1
+    InventoryReservedV1Item:
+        qty: 2
+        sku: 1
+    ListStockBySkusRequest:
+        skus: 1
+    ListStockBySkusResponse:
+        stock: 1
+    ReleaseStockItem:
+        qty: 2
+        sku: 1
+    ReleaseStockRequest:
+        items: 2
+        order_id: 1
+    ReservationStatus:
+        RESERVATION_STATUS_COMMITTED: 2
+        RESERVATION_STATUS_HELD: 1
+        RESERVATION_STATUS_RELEASED: 3
+    ReserveStockItem:
+        qty: 2
+        sku: 1
+    ReserveStockRequest:
+        items: 2
+        order_id: 1
+    Stock:
+        available: 2
+        reserved: 3
+        sku: 1

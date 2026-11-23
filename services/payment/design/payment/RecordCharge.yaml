@@ -1,0 +1,66 @@
+# ============================================================================
+# RecordCharge: 记录一个订单的扣款结果(命令: 组合命令,一个幂等新建;M10 的写入部分)
+# ============================================================================
+API: RecordCharge
+说明: 记录一个订单的扣款结果。同一个订单再次记录时不再写,返回第一次的结果
+背景: 扣款(payment.charge)的消息至少投递一次,同一个订单可能被扣款两次请求。订单号是扣款的幂等键,重复的请求必须得到第一次的结果,不能扣两次、也不能报错。真正的扣款流程(消息触发、模拟的支付网关、发出结果的事件)在 R4,这里只是写入的形状
+负责人: storefront
+风险: 高
+
+种类: 组合命令
+
+输入:
+  order_id: { 类型: 整数64,         必填: 是, 范围: "> 0", 说明: 订单号(扣款的幂等键) }
+  amount:   { 类型: 非负十进制,     必填: 是, 说明: 金额 }
+  status:   { 类型: PaymentStatus, 必填: 是, 说明: 扣款的结果 }
+  reason:   { 类型: 文本,           必填: 否, 长度: 1~200, 说明: 失败的原因(成功时不传) }
+
+操作:
+  - 支付:
+      幂等新建: payments
+      键: [order_id]
+      值: { order_id: 输入.order_id, amount: 输入.amount, status: 输入.status, reason: 输入.reason }
+
+输出:                             # 记录的结果(重复的请求 = 第一次的)
+  order_id:   { 说明: 订单号, 来自: 支付.order_id }
+  amount:     { 说明: 金额, 来自: 支付.amount }
+  status:     { 说明: 扣款的结果, 来自: 支付.status }
+  reason:     { 说明: 失败的原因, 来自: 支付.reason }
+  created_at: { 说明: 第一次记录的时间(数据库的时钟), 来自: 支付.created_at }
+  created:    { 说明: 这次是不是新记录的(重复的请求 = false), 来自: 支付.新建 }
+
+业务规则:
+  - 情况: 同一个订单已经记录过
+    结果: 不再写,不报错,返回第一次记录的结果(金额、结果、原因都是第一次的),created = false
+  - 情况: 同一个订单、金额或结果和第一次不同
+    结果: 同上(订单号就是幂等键;内容不同由上游的对账发现,不在这里检查)
+  - 情况: 成功时传了失败的原因
+    结果: 照样记录(这个 API 不检查结果和原因的组合;R4 的扣款流程由纯函数决定结果和原因)
+
+例子:
+  准备数据:
+    payments:
+      - { order_id: 1001, amount: 2400, status: SUCCEEDED, created_at: "2026-11-21 09:00" }
+  用例:
+    - 说明: 新的订单 → 记录,created = true
+      输入: { order_id: 1002, amount: "1200.50", status: FAILED, reason: card declined }
+      结果: { order_id: 1002, amount: "1200.50", status: FAILED, reason: card declined, created: true }
+      之后:
+        payments:
+          - { order_id: 1001, amount: 2400, status: SUCCEEDED }
+          - { order_id: 1002, amount: 1200.5, status: FAILED, reason: card declined }
+    - 说明: 成功,不传原因 → 原因为空
+      输入: { order_id: 1003, amount: "300", status: SUCCEEDED }
+      结果: { order_id: 1003, amount: "300", status: SUCCEEDED, created: true }
+      之后:
+        payments:
+          - { order_id: 1001 }
+          - { order_id: 1003, amount: 300, status: SUCCEEDED, reason: 不设置 }
+    - 说明: 重复的请求 → 不再写,返回第一次的结果,created = false
+      输入: { order_id: 1001, amount: "2400", status: SUCCEEDED }
+      结果: { order_id: 1001, amount: "2400", status: SUCCEEDED, created_at: "2026-11-21 09:00", created: false }
+      之后: 不变
+    - 说明: 同一个订单、结果不同(重发的消息算出了不同的结果)→ 仍然返回第一次的
+      输入: { order_id: 1001, amount: "2400", status: FAILED, reason: timeout }
+      结果: { order_id: 1001, amount: "2400", status: SUCCEEDED, created_at: "2026-11-21 09:00", created: false }
+      之后: 不变

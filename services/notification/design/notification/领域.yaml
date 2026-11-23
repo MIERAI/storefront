@@ -1,0 +1,23 @@
+# 领域: notification(storefront v2 的通知服务)。这个服务独占的数据库(db/schema/notification.sql)
+领域: notification
+说明: 订单完成或取消时发出的通知
+时区: Asia/Tokyo
+
+表:
+  notifications:
+    说明: 发出的通知(一个事件一条:同一个事件投递两次只记一次)
+    主键: [event_id]
+    更新方式: 只追加
+    列:
+      event_id: 事件 ID(去重用)
+      order_id: 订单号
+      kind:     { 说明: 通知的种类, 枚举: NotificationKind }
+      sent_at:  发出的时间
+
+枚举:
+  NotificationKind:
+    说明: 通知的种类
+    值:
+      ORDER_CONFIRMED: { 说明: 订单已完成, 数据库值: 1 }
+      ORDER_CANCELLED: { 说明: 订单已取消, 数据库值: 2 }
+    读到不认识的值: 返回"未指定",并记录到监控指标

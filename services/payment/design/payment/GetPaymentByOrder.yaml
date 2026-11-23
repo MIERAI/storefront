@@ -1,0 +1,36 @@
+# GetPaymentByOrder: 某个订单的支付结果
+API: GetPaymentByOrder
+说明: 返回某个订单的支付结果
+背景: 订单详情页、对账。还没有扣款的订单返回 found = false
+负责人: storefront
+风险: 低
+
+种类: 按键取一条
+数据来源: payments
+
+输入:
+  order_id: { 类型: 整数64, 必填: 是, 范围: "> 0", 说明: 订单号, 筛选: order_id 等于 }
+
+输出:
+  amount:     金额
+  status:     结果
+  reason:     失败的原因
+  created_at: 扣款时间
+
+找不到时: 返回空
+
+例子:
+  准备数据:
+    payments:
+      - { order_id: 101, amount: 1380, status: SUCCEEDED, reason: null, created_at: "2026-11-01 09:00" }
+      - { order_id: 102, amount: 99.5, status: FAILED, reason: 余额不足, created_at: "2026-11-01 09:05" }
+  用例:
+    - 说明: 成功的支付(没有失败原因)
+      输入: { order_id: 101 }
+      结果: { amount: "1380", status: SUCCEEDED, reason: 不设置, found: true }
+    - 说明: 失败的支付
+      输入: { order_id: 102 }
+      结果: { status: FAILED, reason: 余额不足, found: true }
+    - 说明: 还没有扣款的订单
+      输入: { order_id: 999 }
+      结果: { found: false }

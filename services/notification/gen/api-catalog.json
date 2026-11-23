@@ -1,0 +1,73 @@
+[
+  {
+    "id": "notification.list-notifications-by-order",
+    "method": "ListNotificationsByOrder",
+    "summary": "返回某个订单发出过的通知,按发出时间排序",
+    "path": "/notification.notification.v1.NotificationService/ListNotificationsByOrder",
+    "pattern": "list_all",
+    "cases": [
+      {
+        "name": "某个订单的通知,按发出时间排序",
+        "request": {
+          "order_id": 101
+        },
+        "response": {
+          "notifications": [
+            {
+              "event_id": "e-1",
+              "kind": "NOTIFICATION_KIND_ORDER_CONFIRMED"
+            },
+            {
+              "event_id": "e-2",
+              "kind": "NOTIFICATION_KIND_ORDER_CANCELLED"
+            }
+          ]
+        }
+      },
+      {
+        "name": "没有通知的订单",
+        "request": {
+          "order_id": 999
+        },
+        "response": {
+          "notifications": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "notification.record-order-cancelled",
+    "method": "RecordOrderCancelled",
+    "summary": "收到订单取消的事件,记一条通知(同一个事件只记一次)(收到 order.cancelled v1;入口 = RabbitMQ 的队列,不是 HTTP)",
+    "path": "/notification.notification.v1.NotificationMessageHandlerService/RecordOrderCancelled",
+    "pattern": "message",
+    "cases": [
+      {
+        "name": "记一条通知",
+        "request": {
+          "customer_id": 42,
+          "order_id": 7
+        },
+        "response": {}
+      }
+    ]
+  },
+  {
+    "id": "notification.record-order-confirmed",
+    "method": "RecordOrderConfirmed",
+    "summary": "收到订单完成的事件,记一条通知(同一个事件只记一次)(收到 order.confirmed v1;入口 = RabbitMQ 的队列,不是 HTTP)",
+    "path": "/notification.notification.v1.NotificationMessageHandlerService/RecordOrderConfirmed",
+    "pattern": "message",
+    "cases": [
+      {
+        "name": "记一条通知",
+        "request": {
+          "customer_id": 42,
+          "order_id": 7,
+          "total": "4500.50"
+        },
+        "response": {}
+      }
+    ]
+  }
+]

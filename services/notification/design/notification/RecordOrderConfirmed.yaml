@@ -1,0 +1,40 @@
+# ============================================================================
+# RecordOrderConfirmed: 收到 order.confirmed → 记一条通知(M11;消息处理器: 以事件 id 为主键的幂等新建)
+# ============================================================================
+API: RecordOrderConfirmed
+说明: 收到订单完成的事件,记一条通知(同一个事件只记一次)
+背景: 事件至少投递一次(重投、重发都会有)。同一个事件只能通知一次,以事件 id 为主键;真正的发送(邮件等)是外部的
+负责人: storefront
+风险: 低
+
+种类: 消息处理
+收到: order.confirmed
+
+操作:
+  - 通知:
+      幂等新建: notifications
+      键: [event_id]
+      值: { event_id: 信封.id, order_id: 消息.order_id, kind: ORDER_CONFIRMED }
+
+结果:
+  成功: {}
+
+业务规则:
+  - 情况: 第一次收到这个事件
+    结果: 记一条通知
+  - 情况: 同一个事件再来
+    结果: 不再记(平台的去重;去重记录过期了也有事件 id 的主键挡住)
+
+例子:
+  准备数据:
+    notifications:
+      - { event_id: "evt-old", order_id: 3, kind: ORDER_CONFIRMED, sent_at: "2026-11-21 09:00" }
+  用例:
+    - 说明: 记一条通知
+      消息: { order_id: 7, customer_id: 42, total: "4500.50" }
+      结果: 成功
+      发出: []
+      之后:
+        notifications:
+          - { event_id: "evt-old" }
+          - { event_id: "$信封.id", order_id: 7, kind: ORDER_CONFIRMED }

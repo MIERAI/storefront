@@ -1,0 +1,43 @@
+# notification (storefront v2): test → image (signed) → the v2 lab stack (gitops-manifests v2/overlays/lab: namespace v2-lab,
+# the whole v2 — catalog, inventory, payment, notification, order — with one CNPG cluster (a database and a role per
+# service) and one RabbitMQ; lab only). Only changes under services/notification (its own Go module) or contracts/ release it.
+name: release-notification
+on:
+  push:
+    branches: [main]
+    paths: ["services/notification/**", "contracts/**", "scripts/factory.sh", "scripts/migrations-check.sh", ".github/workflows/release-notification.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run: { shell: bash }   # explicit bash = -eo pipefail
+concurrency: { group: release-notification, cancel-in-progress: false }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: services/notification/go.mod, cache-dependency-path: services/notification/go.sum }
+      - uses: bufbuild/buf-action@v1   # the factory's toolchain (api-factory .github/actions/setup)
+        with: { version: 1.75.0, setup_only: true }
+      - uses: sqlc-dev/setup-sqlc@v4
+        with: { sqlc-version: 1.31.1 }
+      - run: go vet ./... && go test -race ./...
+        working-directory: services/notification
+      - name: generated files match the designs (api-factory at the pinned commit)
+        run: scripts/factory.sh services/notification verify
+  image:
+    needs: test
+    permissions: { contents: read, packages: write, id-token: write }
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/build-image.yml@main
+    with: { image: storefront-notification, context: services/notification, dockerfile: services/notification/Dockerfile, sign: true }
+  promote:
+    needs: image
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
+    with:
+      app: v2      # gitops-manifests v2/app.yaml says which file holds this image
+      env: lab     # v2 runs on the lab only for now (no dev / staging / prod yet)
+      images: ${{ needs.image.outputs.name }}=${{ needs.image.outputs.tag }}   # ghcr.io/<this repository's owner>/storefront-notification
+    secrets:
+      MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}

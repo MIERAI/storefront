@@ -1,0 +1,97 @@
+# ============================================================================
+# AdjustStock: 调整库存数量(W4,命令: 组合命令 = 条件更新 + 审计记录,一个事务)
+# ============================================================================
+API: AdjustStock
+说明: 调整一个 SKU 的可售数量(入库、盘点、报损),同时写一条调整的审计记录。调整之后可售数量会小于 0 时不调整
+背景: 仓库的入库、盘点、报损在管理画面上登记。可售数量绝不能变成负数(超卖);每次调整都要留下记录(谁也不能改了库存却没有记录)。两个人同时调整同一个 SKU 时按调整量累加,不需要版本号
+负责人: storefront
+风险: 中
+
+种类: 组合命令
+
+输入:
+  sku:    { 类型: 文本,             必填: 是, 长度: 3~32, 格式: 代码, 说明: SKU }
+  delta:  { 类型: 整数32,           必填: 是, 范围: -100000~100000, 说明: "调整量(+ 入库,- 出库 / 报损;0 = 盘点没有差异)" }
+  reason: { 类型: AdjustmentReason, 必填: 是, 说明: 调整的原因 }
+
+操作:
+  - 库存:
+      更新: stock
+      键: { sku: 输入.sku }
+      设置: { available: "available + 输入.delta", version: "version + 1", updated_at: 现在 }
+      条件: "available + 输入.delta >= 0"
+      不满足: INSUFFICIENT_STOCK
+      找不到时: "stock not found: {sku}"
+  - 记录:
+      新建: stock_adjustments
+      值: { sku: 库存.sku, delta: 输入.delta, reason: 输入.reason, adjusted_at: 现在 }
+
+输出:
+  sku:           { 说明: SKU, 来自: 库存.sku }
+  available:     { 说明: 调整之后的可售数量, 来自: 库存.available }
+  reserved:      { 说明: 已预留数量(不变), 来自: 库存.reserved }
+  version:       { 说明: 调整之后的版本号(+ 1), 来自: 库存.version }
+  adjustment_id: { 说明: 审计记录的 id(数据库生成), 来自: 记录.id }
+  adjusted_at:   { 说明: 调整的时间(= 请求的时刻), 来自: 记录.adjusted_at }
+
+业务规则:
+  - 情况: 调整之后可售数量小于 0(出库 / 报损的数量比现有的多)
+    结果: 库存不足(FAILED_PRECONDITION,原因码 INSUFFICIENT_STOCK),不调整、不写审计记录
+  - 情况: 调整之后可售数量正好是 0
+    结果: 调整(可以卖完)
+  - 情况: 调整量是 0(盘点没有差异)
+    结果: 照样记录(版本号加 1、审计记录一行),盘点做过了也是要留下的事实
+  - 情况: 没有这个 SKU 的库存记录
+    结果: 找不到(NOT_FOUND),什么都不写。库存记录在商品登记时建立,这个 API 不新建
+  - 情况: 已预留数量
+    结果: 不变(预留由订单的流程处理,R4)
+  - 情况: 两个人同时调整同一个 SKU
+    结果: 按调整量依次累加,每一次都检查可售数量不小于 0(不需要版本号)
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    stock:
+      - { sku: "BEAN-001", available: 10, reserved: 2, version: 3, updated_at: "2026-11-01 09:00" }
+      - { sku: "BAG-002", available: 0, reserved: 0, version: 1, updated_at: "2026-11-01 09:00" }
+    stock_adjustments:
+      - { id: 5, sku: "BEAN-001", delta: 10, reason: RECEIVED, adjusted_at: "2026-11-01 09:00" }
+  用例:
+    - 说明: 入库 → 可售数量增加,版本号加 1,写审计记录(数据库生成 id = 6)
+      输入: { sku: "BEAN-001", delta: 5, reason: RECEIVED }
+      结果: { sku: "BEAN-001", available: 15, reserved: 2, version: 4, adjustment_id: 6, adjusted_at: "2026-11-22 10:00" }
+      之后:
+        stock:
+          - { sku: "BEAN-001", available: 15, reserved: 2, version: 4, updated_at: "2026-11-22 10:00" }
+          - { sku: "BAG-002", available: 0, version: 1 }
+        stock_adjustments:
+          - { id: 5, delta: 10 }
+          - { id: 6, sku: "BEAN-001", delta: 5, reason: RECEIVED, adjusted_at: "2026-11-22 10:00" }
+    - 说明: 报损到正好 0 → 调整
+      输入: { sku: "BEAN-001", delta: -10, reason: DAMAGED }
+      结果: { available: 0, version: 4, adjustment_id: 6 }
+      之后:
+        stock:
+          - { sku: "BEAN-001", available: 0, reserved: 2, version: 4 }
+          - { sku: "BAG-002", available: 0, version: 1 }
+        stock_adjustments:
+          - { id: 5 }
+          - { id: 6, sku: "BEAN-001", delta: -10, reason: DAMAGED }
+    - 说明: 出库比现有的多 → 库存不足,不调整、不写审计记录
+      输入: { sku: "BEAN-001", delta: -11, reason: STOCKTAKE }
+      错误: INSUFFICIENT_STOCK
+      之后: 不变
+    - 说明: 盘点没有差异(0)→ 照样记录
+      输入: { sku: "BAG-002", delta: 0, reason: STOCKTAKE }
+      结果: { sku: "BAG-002", available: 0, version: 2, adjustment_id: 6 }
+      之后:
+        stock:
+          - { sku: "BEAN-001", available: 10, version: 3 }
+          - { sku: "BAG-002", available: 0, version: 2 }
+        stock_adjustments:
+          - { id: 5 }
+          - { id: 6, sku: "BAG-002", delta: 0, reason: STOCKTAKE }
+    - 说明: 没有库存记录的 SKU → 找不到,什么都不写
+      输入: { sku: "NONE-999", delta: 1, reason: RECEIVED }
+      错误: 找不到
+      之后: 不变

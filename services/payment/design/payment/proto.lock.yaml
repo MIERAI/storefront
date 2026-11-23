@@ -1,0 +1,34 @@
+# 由设计编译器维护,不要手改。proto 的字段编号对外发布后不能变: 只追加,删掉的字段编号保留(reserved)
+字段编号:
+    ChargePaymentRequest:
+        amount: 2
+        order_id: 1
+    GetPaymentByOrderRequest:
+        order_id: 1
+    GetPaymentByOrderResponse:
+        amount: 1
+        created_at: 4
+        found: 5
+        reason: 3
+        status: 2
+    PaymentFailedV1:
+        order_id: 1
+        reason: 2
+    PaymentStatus:
+        PAYMENT_STATUS_FAILED: 2
+        PAYMENT_STATUS_SUCCEEDED: 1
+    PaymentSucceededV1:
+        amount: 2
+        order_id: 1
+    RecordChargeRequest:
+        amount: 2
+        order_id: 1
+        reason: 4
+        status: 3
+    RecordChargeResponse:
+        amount: 2
+        created: 6
+        created_at: 5
+        order_id: 1
+        reason: 4
+        status: 3

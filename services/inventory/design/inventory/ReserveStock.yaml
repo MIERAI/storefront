@@ -1,0 +1,90 @@
+# ============================================================================
+# ReserveStock: 收到 inventory.reserve → 预留库存(M1;消息处理器: 每项 + 幂等新建 + 仅当 + 条件更新 + 墓碑)
+# ============================================================================
+API: ReserveStock
+说明: 为一个订单预留库存。每个 SKU 的可售数量都够才预留(全部或全不),回答 inventory.reserved 或 inventory.reservation_failed
+背景: 订单的 saga 发命令过来,至少投递一次、不保证顺序。重投只处理一次;同样内容的新命令(saga 的超时重发)不能扣两次;释放先到了(墓碑)就不再预留,回答 RELEASED
+负责人: storefront
+风险: 高
+
+种类: 消息处理
+收到: inventory.reserve
+每项: 消息.items
+
+操作:
+  - 预留:
+      幂等新建: reservations
+      键: [order_id, sku]
+      值: { order_id: 消息.order_id, sku: 项.sku, qty: 项.qty, status: HELD }
+  - 扣减:
+      更新: stock
+      键: { sku: 项.sku }
+      仅当: 预留.新建
+      设置: { available: "available - 项.qty", reserved: "reserved + 项.qty", version: "version + 1", updated_at: 现在 }
+      条件: "available >= 项.qty"
+      不满足: INSUFFICIENT_STOCK
+      找不到时: "stock not found (order {order_id})"
+
+结果:
+  RELEASED:
+    当: "任一项 预留.status = RELEASED"
+    发出:
+      - inventory.reservation_failed: { order_id: 消息.order_id, reason: "'RELEASED'" }
+  INSUFFICIENT_STOCK:
+    发出:
+      - inventory.reservation_failed: { order_id: 消息.order_id, reason: "'INSUFFICIENT_STOCK'" }
+  成功:
+    发出:
+      - inventory.reserved: { order_id: 消息.order_id, items: 消息.items }
+
+业务规则:
+  - 情况: 每个 SKU 的可售数量都够
+    结果: 每个 SKU 一条 HELD 的预留(过期时间 = 24 小时后,数据库的默认值),可售减少、已预留增加;发出 inventory.reserved
+  - 情况: 某个 SKU 不够
+    结果: 一个都不预留(前面的也回滚);发出 inventory.reservation_failed(INSUFFICIENT_STOCK)
+  - 情况: 释放先到了(有 RELEASED 的墓碑)
+    结果: 不预留;发出 inventory.reservation_failed(RELEASED)
+  - 情况: 同样内容的命令再来(新 id)
+    结果: 已经预留过的 SKU 不再扣(仅当 预留.新建),照样回答 inventory.reserved
+  - 情况: 没有这个 SKU 的库存记录
+    结果: 毒消息(进 DLQ,人来处理),什么都不写
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    stock:
+      - { sku: "BEAN-001", available: 10, reserved: 2, version: 3, updated_at: "2026-11-01 09:00" }
+      - { sku: "BAG-002", available: 1, reserved: 0, version: 1, updated_at: "2026-11-01 09:00" }
+    reservations:
+      - { order_id: 9, sku: "BEAN-001", qty: 1, status: RELEASED, expires_at: "2026-11-23 09:00", created_at: "2026-11-22 09:00" }
+  用例:
+    - 说明: 两个 SKU 都够 → 都预留,发出 inventory.reserved
+      消息: { order_id: 7, items: [ { sku: "BEAN-001", qty: 3 }, { sku: "BAG-002", qty: 1 } ] }
+      结果: 成功
+      发出:
+        - inventory.reserved: { order_id: 7, items: [ { sku: "BEAN-001", qty: 3 }, { sku: "BAG-002", qty: 1 } ] }
+      之后:
+        stock:
+          - { sku: "BEAN-001", available: 7, reserved: 5, version: 4, updated_at: "2026-11-22 10:00" }
+          - { sku: "BAG-002", available: 0, reserved: 1, version: 2 }
+        reservations:
+          - { order_id: 9, sku: "BEAN-001", status: RELEASED }
+          - { order_id: 7, sku: "BEAN-001", qty: 3, status: HELD }
+          - { order_id: 7, sku: "BAG-002", qty: 1, status: HELD }
+    - 说明: 第二个 SKU 不够 → 一个都不预留,发出 inventory.reservation_failed
+      消息: { order_id: 7, items: [ { sku: "BEAN-001", qty: 3 }, { sku: "BAG-002", qty: 2 } ] }
+      结果: INSUFFICIENT_STOCK
+      发出:
+        - inventory.reservation_failed: { order_id: 7, reason: INSUFFICIENT_STOCK }
+      之后: 不变
+    - 说明: 释放先到了 → 不预留,发出 inventory.reservation_failed(RELEASED)
+      消息: { order_id: 9, items: [ { sku: "BEAN-001", qty: 1 } ] }
+      结果: RELEASED
+      发出:
+        - inventory.reservation_failed: { order_id: 9, reason: RELEASED }
+      之后: 不变
+    - 说明: 没有库存记录的 SKU → 毒消息
+      消息: { order_id: 8, items: [ { sku: "NONE-999", qty: 1 } ] }
+      结果: 毒消息
+      发出: []
+      之后: 不变

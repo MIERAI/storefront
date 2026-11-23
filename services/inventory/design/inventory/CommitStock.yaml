@@ -1,0 +1,71 @@
+# ============================================================================
+# CommitStock: 收到 inventory.commit → 确认预留(M2;消息处理器: 跳过 + 仅当 已更新 + 死信的结果)
+# ============================================================================
+API: CommitStock
+说明: "确认一个订单的预留(支付成功之后): HELD → COMMITTED,已预留数量减少(出库)。预留已经释放了 → 进 DLQ"
+背景: 重复的确认不能出库两次。预留已经释放、支付却成功了是不该发生的异常(预留的过期时间远长于 saga 的期限),不能悄悄成功,要人来处理
+负责人: storefront
+风险: 高
+
+种类: 消息处理
+收到: inventory.commit
+每项: 消息.items
+
+操作:
+  - 确认:
+      更新: reservations
+      键: { order_id: 消息.order_id, sku: 项.sku }
+      设置: { status: COMMITTED }
+      条件: "status = HELD"
+      不满足: 跳过
+      找不到时: "reservation not found (order {order_id})"
+  - 出库:
+      更新: stock
+      键: { sku: 项.sku }
+      仅当: 确认.已更新
+      设置: { reserved: "reserved - 确认.qty", version: "version + 1", updated_at: 现在 }
+      找不到时: "stock not found (order {order_id})"
+
+结果:
+  ALREADY_RELEASED:
+    当: "任一项 确认.status = RELEASED"
+    处理: 死信
+  成功:
+    发出:
+      - inventory.committed: { order_id: 消息.order_id }
+
+业务规则:
+  - 情况: 预留是 HELD
+    结果: 改成 COMMITTED,已预留数量减少预留的数量
+  - 情况: 已经确认过(重发)
+    结果: 跳过,照样发出 inventory.committed
+  - 情况: 预留已经释放
+    结果: 不提交,进 DLQ(ALREADY_RELEASED)
+  - 情况: 没有这个预留
+    结果: 毒消息(DLQ)
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    stock:
+      - { sku: "BEAN-001", available: 7, reserved: 5, version: 4, updated_at: "2026-11-01 09:00" }
+    reservations:
+      - { order_id: 7, sku: "BEAN-001", qty: 3, status: HELD, expires_at: "2026-11-23 09:00", created_at: "2026-11-22 09:00" }
+      - { order_id: 8, sku: "BEAN-001", qty: 2, status: RELEASED, expires_at: "2026-11-23 09:00", created_at: "2026-11-22 09:00" }
+  用例:
+    - 说明: HELD → COMMITTED,已预留减少
+      消息: { order_id: 7, items: [ { sku: "BEAN-001", qty: 3 } ] }
+      结果: 成功
+      发出:
+        - inventory.committed: { order_id: 7 }
+      之后:
+        stock:
+          - { sku: "BEAN-001", available: 7, reserved: 2, version: 5, updated_at: "2026-11-22 10:00" }
+        reservations:
+          - { order_id: 7, sku: "BEAN-001", status: COMMITTED }
+          - { order_id: 8, sku: "BEAN-001", status: RELEASED }
+    - 说明: 预留已经释放 → 死信(不提交)
+      消息: { order_id: 8, items: [ { sku: "BEAN-001", qty: 2 } ] }
+      结果: ALREADY_RELEASED
+      发出: []
+      之后: 不变

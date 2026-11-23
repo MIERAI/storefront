@@ -1,0 +1,222 @@
+# ============================================================================
+# OrderSaga(storefront v2 M4–M9 + J2): 下单 saga 的状态机
+#   RESERVING(库存预留)→ CHARGING(扣款)→ CONFIRMING(库存确认)→ CONFIRMED
+#   预留失败 → CANCELLED;扣款失败 / 预留 15 分钟没有结果 → RELEASING(释放库存)→ CANCELLED
+# ============================================================================
+API: OrderSaga
+说明: 下单的 saga。按状态发命令给 inventory / payment、收它们的回答、失败时释放库存再取消订单
+背景: 编排式 saga(storefront 设计 §6)。inventory / payment 通过消息回答,至少投递一次、不保证顺序;命令丢了要重发
+  (inventory / payment 的处理都是可重入的)。扣款没有撤销的命令,所以 CHARGING 没有期限:支付恢复之前订单一直等,
+  不能出现"扣了款、订单却取消"。迟到的预留由 inventory 的墓碑挡住,状态机不为迟到的消息做补偿
+负责人: storefront
+风险: 高
+
+种类: 状态机
+实体: orders
+状态列: status
+进入时间列: updated_at
+版本列: version
+重发计数列: state_attempts
+创建时间列: created_at
+开始: PlaceOrder
+
+状态:
+  RESERVING:
+    命令: { inventory.reserve: { order_id: 实体.id, items: 载入.items } }
+    超时: 30 秒
+    重发间隔: 60 秒
+    期限: 15 分钟
+    期限后: RELEASING
+  CHARGING:
+    命令: { payment.charge: { order_id: 实体.id, amount: 实体.total } }
+    超时: 30 秒
+    重发间隔: 60 秒
+  CONFIRMING:
+    命令: { inventory.commit: { order_id: 实体.id, items: 载入.items } }
+    超时: 30 秒
+    重发间隔: 60 秒
+  RELEASING:
+    命令: { inventory.release: { order_id: 实体.id, items: 载入.items } }
+    超时: 30 秒
+    重发间隔: 60 秒
+  CONFIRMED: { 终态: 是 }
+  CANCELLED: { 终态: 是 }
+
+载入:
+  items: { 表: order_items, 条件: [id = order_id], 排序: [line_no 小到大], 上限: 50, 列: [sku, qty] }
+
+转移:
+  - { 从: RESERVING,  收到: inventory.reserved,           到: CHARGING }
+  - { 从: RESERVING,  收到: inventory.reservation_failed, 到: CANCELLED,
+      发出: [ order.cancelled: { order_id: 实体.id, customer_id: 实体.customer_id, reason: 消息.reason } ] }
+  - { 从: CHARGING,   收到: payment.succeeded, 守卫: "消息.amount = 实体.total", 到: CONFIRMING }
+  - { 从: CHARGING,   收到: payment.failed,               到: RELEASING }
+  - { 从: CONFIRMING, 收到: inventory.committed,          到: CONFIRMED,
+      发出: [ order.confirmed: { order_id: 实体.id, customer_id: 实体.customer_id, total: 实体.total } ] }
+  - { 从: RELEASING,  收到: inventory.released,           到: CANCELLED,
+      发出: [ order.cancelled: { order_id: 实体.id, customer_id: 实体.customer_id, reason: "'COMPENSATED'" } ] }
+
+业务规则:
+  - 情况: 库存预留成功
+    结果: 进入 CHARGING,发出 payment.charge(金额 = 订单金额)
+  - 情况: 库存预留失败(库存不足,或者释放的墓碑先到了)
+    结果: 进入 CANCELLED,发出 order.cancelled(原因 = inventory 给的原因)
+  - 情况: 扣款成功,金额 = 订单金额
+    结果: 进入 CONFIRMING,发出 inventory.commit(明细的 SKU 和数量)
+  - 情况: 扣款成功,但金额和订单金额不同
+    结果: 拒绝(进 DLQ,需要人处理),订单不变
+  - 情况: 扣款失败
+    结果: 进入 RELEASING,发出 inventory.release
+  - 情况: 库存确认完成
+    结果: 进入 CONFIRMED(终态),发出 order.confirmed(顾客、金额)
+  - 情况: 库存释放完成
+    结果: 进入 CANCELLED(终态),发出 order.cancelled(原因 COMPENSATED)
+  - 情况: 等待状态 30 秒没有回答
+    结果: 重发这个状态的命令,之后每 60 秒一次(订单的 updated_at 不变,state_attempts + 1)
+  - 情况: RESERVING 15 分钟还没有结果(inventory 停机等)
+    结果: 进入 RELEASING,发出 inventory.release(释放可能已经做了的预留,并留下墓碑挡住迟到的预留)
+  - 情况: CHARGING / CONFIRMING / RELEASING 一直没有回答
+    结果: 一直重发,没有期限(扣款没有撤销的命令;确认 / 释放是可重入的)
+  - 情况: 重发引起的第二个回答,或者订单已经往前走了之后才到的回答
+    结果: 忽略(订单不变,不发消息)
+  - 情况: 在这个状态和它之前的状态都不会出现的回答(例如 RESERVING 收到 inventory.committed),或者订单不存在
+    结果: 拒绝(进 DLQ,说明某处有 bug)
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    orders:
+      - { id: 1, customer_id: 7, status: RESERVING,  total: "2001.25", version: 1, state_attempts: 0, created_at: "2026-11-22 09:59:50", updated_at: "2026-11-22 09:59:50" }
+      - { id: 2, customer_id: 7, status: CHARGING,   total: "500",     version: 2, state_attempts: 0, created_at: "2026-11-22 09:59:00", updated_at: "2026-11-22 09:59:45" }
+      - { id: 3, customer_id: 8, status: CONFIRMING, total: "80",      version: 3, state_attempts: 0, created_at: "2026-11-22 09:59:00", updated_at: "2026-11-22 09:59:50" }
+      - { id: 4, customer_id: 8, status: RELEASING,  total: "120",     version: 3, state_attempts: 1, created_at: "2026-11-22 09:50:00", updated_at: "2026-11-22 09:58:45" }
+      - { id: 5, customer_id: 9, status: CONFIRMED,  total: "30",      version: 4, state_attempts: 0, created_at: "2026-11-22 09:00:00", updated_at: "2026-11-22 09:01:00" }
+    order_items:
+      - { order_id: 1, line_no: 2, sku: "TEA-001",  qty: 1, price: "0.25" }
+      - { order_id: 1, line_no: 1, sku: "BEAN-001", qty: 2, price: "1000.50" }
+      - { order_id: 2, line_no: 1, sku: "MUG-001",  qty: 5, price: "100" }
+      - { order_id: 3, line_no: 1, sku: "TEA-002",  qty: 4, price: "20" }
+      - { order_id: 4, line_no: 1, sku: "BEAN-002", qty: 3, price: "40" }
+  用例:
+    - 说明: 预留成功 → CHARGING,发出 payment.charge(金额 = 订单金额)
+      消息: { inventory.reserved: { order_id: 1, items: [ { sku: "BEAN-001", qty: 2 }, { sku: "TEA-001", qty: 1 } ] } }
+      结果: CHARGING
+      发出:
+        - payment.charge: { order_id: 1, amount: "2001.25" }
+      之后:
+        orders:
+          - { id: 1, status: CHARGING, version: 2, state_attempts: 0, updated_at: "2026-11-22 10:00" }
+          - { id: 2, status: CHARGING }
+          - { id: 3, status: CONFIRMING }
+          - { id: 4, status: RELEASING }
+          - { id: 5, status: CONFIRMED }
+    - 说明: 预留失败 → CANCELLED,发出 order.cancelled(inventory 给的原因)
+      消息: { inventory.reservation_failed: { order_id: 1, reason: INSUFFICIENT_STOCK } }
+      结果: CANCELLED
+      发出:
+        - order.cancelled: { order_id: 1, customer_id: 7, reason: INSUFFICIENT_STOCK }
+      之后:
+        orders:
+          - { id: 1, status: CANCELLED, version: 2, updated_at: "2026-11-22 10:00" }
+          - { id: 2, status: CHARGING }
+          - { id: 3, status: CONFIRMING }
+          - { id: 4, status: RELEASING }
+          - { id: 5, status: CONFIRMED }
+    - 说明: 扣款成功、金额一致 → CONFIRMING,发出 inventory.commit(明细按行号)
+      消息: { payment.succeeded: { order_id: 2, amount: "500.00" } }
+      结果: CONFIRMING
+      发出:
+        - inventory.commit: { order_id: 2, items: [ { sku: "MUG-001", qty: 5 } ] }
+      之后:
+        orders:
+          - { id: 1, status: RESERVING }
+          - { id: 2, status: CONFIRMING, version: 3, state_attempts: 0, updated_at: "2026-11-22 10:00" }
+          - { id: 3, status: CONFIRMING }
+          - { id: 4, status: RELEASING }
+          - { id: 5, status: CONFIRMED }
+    - 说明: 扣款成功但金额不同 → 拒绝,订单不变
+      消息: { payment.succeeded: { order_id: 2, amount: "499" } }
+      结果: 拒绝
+      发出: []
+      之后: 不变
+    - 说明: 扣款失败 → RELEASING,发出 inventory.release
+      消息: { payment.failed: { order_id: 2, reason: card declined } }
+      结果: RELEASING
+      发出:
+        - inventory.release: { order_id: 2, items: [ { sku: "MUG-001", qty: 5 } ] }
+      之后:
+        orders:
+          - { id: 1, status: RESERVING }
+          - { id: 2, status: RELEASING, version: 3, updated_at: "2026-11-22 10:00" }
+          - { id: 3, status: CONFIRMING }
+          - { id: 4, status: RELEASING }
+          - { id: 5, status: CONFIRMED }
+    - 说明: 库存确认完成 → CONFIRMED,发出 order.confirmed
+      消息: { inventory.committed: { order_id: 3 } }
+      结果: CONFIRMED
+      发出:
+        - order.confirmed: { order_id: 3, customer_id: 8, total: "80" }
+      之后:
+        orders:
+          - { id: 1, status: RESERVING }
+          - { id: 2, status: CHARGING }
+          - { id: 3, status: CONFIRMED, version: 4, updated_at: "2026-11-22 10:00" }
+          - { id: 4, status: RELEASING }
+          - { id: 5, status: CONFIRMED }
+    - 说明: 库存释放完成 → CANCELLED,发出 order.cancelled(COMPENSATED)
+      消息: { inventory.released: { order_id: 4 } }
+      结果: CANCELLED
+      发出:
+        - order.cancelled: { order_id: 4, customer_id: 8, reason: COMPENSATED }
+      之后:
+        orders:
+          - { id: 1, status: RESERVING }
+          - { id: 2, status: CHARGING }
+          - { id: 3, status: CONFIRMING }
+          - { id: 4, status: CANCELLED, version: 4, state_attempts: 0, updated_at: "2026-11-22 10:00" }
+          - { id: 5, status: CONFIRMED }
+    - 说明: 已经确认的订单又收到预留成功(重发引起的第二个回答)→ 忽略
+      消息: { inventory.reserved: { order_id: 5, items: [ { sku: "TEA-001", qty: 1 } ] } }
+      结果: 忽略
+      发出: []
+      之后: 不变
+    - 说明: 还在预留就收到确认完成(不可能的消息)→ 拒绝
+      消息: { inventory.committed: { order_id: 1 } }
+      结果: 拒绝
+      发出: []
+      之后: 不变
+    - 说明: 订单不存在 → 拒绝
+      消息: { inventory.released: { order_id: 99 } }
+      结果: 拒绝
+      发出: []
+      之后: 不变
+    - 说明: 30 秒没有回答 → 重发这个状态的命令(进入早的在前);释放中的第 2 次重发(进入之后 30 + 60 秒)
+      现在: "2026-11-22 10:00:16"
+      超时: 是
+      结果: 重发
+      发出:
+        - inventory.release: { order_id: 4, items: [ { sku: "BEAN-002", qty: 3 } ] }
+        - payment.charge: { order_id: 2, amount: "500" }
+      之后:
+        orders:
+          - { id: 1, status: RESERVING, state_attempts: 0 }
+          - { id: 2, status: CHARGING, version: 3, state_attempts: 1, updated_at: "2026-11-22 09:59:45" }
+          - { id: 3, status: CONFIRMING, state_attempts: 0 }
+          - { id: 4, status: RELEASING, version: 4, state_attempts: 2, updated_at: "2026-11-22 09:58:45" }
+          - { id: 5, status: CONFIRMED }
+    - 说明: 预留 15 分钟没有结果 → RELEASING,发出 inventory.release(明细按行号)
+      现在: "2026-11-22 10:14:50"
+      超时: 是
+      结果: 期限
+      发出:
+        - inventory.release: { order_id: 4, items: [ { sku: "BEAN-002", qty: 3 } ] }
+        - payment.charge: { order_id: 2, amount: "500" }
+        - inventory.release: { order_id: 1, items: [ { sku: "BEAN-001", qty: 2 }, { sku: "TEA-001", qty: 1 } ] }
+        - inventory.commit: { order_id: 3, items: [ { sku: "TEA-002", qty: 4 } ] }
+      之后:
+        orders:
+          - { id: 1, status: RELEASING, version: 2, state_attempts: 0, updated_at: "2026-11-22 10:14:50" }
+          - { id: 2, status: CHARGING, version: 3, state_attempts: 1 }
+          - { id: 3, status: CONFIRMING, version: 4, state_attempts: 1 }
+          - { id: 4, status: RELEASING, version: 4, state_attempts: 2 }
+          - { id: 5, status: CONFIRMED }

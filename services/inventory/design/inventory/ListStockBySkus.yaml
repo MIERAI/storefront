@@ -1,0 +1,32 @@
+# ListStockBySkus: 多个 SKU 的库存(web 的商品列表页一次查一页的 SKU)
+API: ListStockBySkus
+说明: 返回指定的多个 SKU 的库存,按 SKU 排序。没有记录的 SKU 不出现在结果里
+背景: 商品列表页一页最多 100 个商品,一次查完(不逐个调用 GetStock)
+负责人: storefront
+风险: 低
+
+种类: 多条
+数据来源: stock
+
+输入:
+  skus: { 类型: 文本列表, 必填: 是, 个数: "1~100", 长度: 3~32, 说明: SKU 的列表, 筛选: sku 属于 }
+
+输出:
+  sku:       SKU
+  available: 可售数量
+  reserved:  已预留数量
+
+排序: [sku 小到大]
+上限: 100
+输出行名: Stock
+
+例子:
+  准备数据:
+    stock:
+      - { sku: "BEAN-001", available: 12, reserved: 3, version: 1, updated_at: "2026-11-01 09:00" }
+      - { sku: "BAG-002",  available: 0,  reserved: 0, version: 1, updated_at: "2026-11-01 09:00" }
+      - { sku: "MUG-004",  available: 5,  reserved: 1, version: 1, updated_at: "2026-11-01 09:00" }
+  用例:
+    - 说明: 指定的 SKU,按 SKU 排序(没有记录的不出现)
+      输入: { skus: ["MUG-004", "BAG-002", "NONE-999"] }
+      结果: { stock: [{ sku: "BAG-002", available: 0, reserved: 0 }, { sku: "MUG-004", available: 5, reserved: 1 }] }

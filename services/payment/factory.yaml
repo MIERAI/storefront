@@ -1,0 +1,4 @@
+# This project's settings; everything else (AI models, the adapter) comes from the factory's factory.yaml.
+proto:
+  package_prefix: payment
+contracts: ../../contracts   # the system's message contracts (repository root contracts/, shared by the v2 services; producers write, consumers read)

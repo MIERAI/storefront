@@ -1,0 +1,9 @@
+# 由设计编译器维护: 部署过的状态机的状态(只能新增;删除 / 改名的状态要先确认在途的实例数 = 0,再写进 已下线)
+OrderSaga:
+    状态:
+        CANCELLED: 7
+        CHARGING: 3
+        CONFIRMED: 6
+        CONFIRMING: 4
+        RELEASING: 5
+        RESERVING: 2

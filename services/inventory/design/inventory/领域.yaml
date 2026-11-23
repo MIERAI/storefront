@@ -1,0 +1,53 @@
+# 领域: inventory(storefront v2 的库存服务)。这个服务独占的数据库(db/schema/inventory.sql)
+领域: inventory
+说明: 库存数量和订单的预留
+时区: Asia/Tokyo
+
+表:
+  stock:
+    说明: 每个 SKU 的库存(可售数 + 已预留数)
+    主键: [sku]
+    更新方式: 可以更新
+    列:
+      sku:        SKU
+      available:  可售数量(不会小于 0)
+      reserved:   已预留数量
+      version:    版本号(乐观锁)
+      updated_at: 最后更新时间
+  reservations:
+    说明: 订单对某个 SKU 的预留
+    主键: [order_id, sku]
+    更新方式: 可以更新
+    列:
+      order_id:   订单号
+      sku:        SKU
+      qty:        数量
+      status:     { 说明: 状态, 枚举: ReservationStatus }
+      expires_at: 过期时间(没有确认的预留到期自动释放)
+      created_at: 创建时间
+  stock_adjustments:
+    说明: 库存调整的审计记录(每次调整一行,和库存的变化在同一个事务里写)
+    主键: [id]
+    更新方式: 可以更新
+    列:
+      id:          记录 id(数据库生成)
+      sku:         SKU
+      delta:       调整量(+ 入库,- 出库 / 报损;0 = 盘点没有差异)
+      reason:      { 说明: 调整的原因, 枚举: AdjustmentReason }
+      adjusted_at: 调整的时间
+
+枚举:
+  ReservationStatus:
+    说明: 预留的状态
+    值:
+      HELD:      { 说明: 预留中, 数据库值: 1 }
+      COMMITTED: { 说明: 已确认, 数据库值: 2 }
+      RELEASED:  { 说明: 已释放, 数据库值: 3 }
+    读到不认识的值: 返回"未指定",并记录到监控指标
+  AdjustmentReason:
+    说明: 库存调整的原因
+    值:
+      RECEIVED:  { 说明: 入库, 数据库值: 1 }
+      STOCKTAKE: { 说明: 盘点, 数据库值: 2 }
+      DAMAGED:   { 说明: 报损, 数据库值: 3 }
+    读到不认识的值: 返回"未指定",并记录到监控指标

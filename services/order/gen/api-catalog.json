@@ -1,0 +1,208 @@
+[
+  {
+    "id": "order.get-order",
+    "method": "GetOrder",
+    "summary": "返回一个订单和它的明细(按行号)",
+    "path": "/order.order.v1.OrderService/GetOrder",
+    "pattern": "get_by_id",
+    "cases": [
+      {
+        "name": "明细按行号返回,金额 = 数量 × 单价(十进制按文本,不丢精度)",
+        "request": {
+          "id": 1
+        },
+        "response": {
+          "created_at": "2026-11-01T00:00:00Z",
+          "customer_id": 7,
+          "id": 1,
+          "items": [
+            {
+              "amount": "2000.00",
+              "line_no": 1,
+              "price": "1000.00",
+              "qty": 2,
+              "sku": "BEAN-001"
+            },
+            {
+              "amount": "1250",
+              "line_no": 2,
+              "price": "1250",
+              "qty": 1,
+              "sku": "BEAN-002"
+            }
+          ],
+          "status": "ORDER_STATUS_CONFIRMED",
+          "total": "3250"
+        }
+      },
+      {
+        "name": "没有明细的订单 → 空列表",
+        "request": {
+          "id": 2
+        },
+        "response": {
+          "id": 2,
+          "items": [],
+          "status": "ORDER_STATUS_PENDING"
+        }
+      }
+    ]
+  },
+  {
+    "id": "order.list-orders-by-customer",
+    "method": "ListOrdersByCustomer",
+    "summary": "返回一个顾客的订单(新到旧,分页),每个订单带明细的行数和明细金额的合计",
+    "path": "/order.order.v1.OrderService/ListOrdersByCustomer",
+    "pattern": "list_keyset",
+    "cases": [
+      {
+        "name": "新到旧(同一时刻按订单号大到小);没有明细的订单件数 0、合计 0;合计是精确的十进制(0.1 + 0.2 = 0.3)",
+        "request": {
+          "customer_id": 7
+        },
+        "response": {
+          "orders": [
+            {
+              "id": 3,
+              "item_count": 2,
+              "items_total": "0.3",
+              "status": "ORDER_STATUS_PENDING"
+            },
+            {
+              "id": 2,
+              "item_count": 0,
+              "items_total": "0",
+              "status": "ORDER_STATUS_CANCELLED"
+            },
+            {
+              "id": 1,
+              "item_count": 2,
+              "items_total": "3250",
+              "status": "ORDER_STATUS_CONFIRMED",
+              "total": "3250"
+            }
+          ]
+        }
+      },
+      {
+        "name": "没有订单的顾客",
+        "request": {
+          "customer_id": 9
+        },
+        "response": {
+          "orders": []
+        }
+      }
+    ]
+  },
+  {
+    "id": "order.list-stuck-orders",
+    "method": "ListStuckOrders",
+    "summary": "返回在等待状态(库存预留 / 支付 / 库存确认 / 库存释放)里停留超过指定分钟数的订单,最后一次状态转移早的在前",
+    "path": "/order.order.v1.OrderService/ListStuckOrders",
+    "pattern": "list_all",
+    "cases": [
+      {
+        "name": "停留超过 30 分钟的等待状态的订单(完成 / 取消 / 还没开始的不算;正好 30 分钟前转移的 4 号不算),最后一次转移早的在前,同时刻按订单号",
+        "request": {
+          "stuck_minutes": 30
+        },
+        "response": {
+          "orders": [
+            {
+              "id": 1
+            },
+            {
+              "id": 6
+            }
+          ]
+        }
+      },
+      {
+        "name": "29 分钟的话,30 分钟前转移的订单也算",
+        "request": {
+          "stuck_minutes": 29
+        },
+        "response": {
+          "orders": [
+            {
+              "id": 1
+            },
+            {
+              "id": 6
+            },
+            {
+              "id": 4
+            }
+          ]
+        }
+      },
+      {
+        "name": "过了一段时间再看,刚才 10 分钟前转移的订单也卡住了",
+        "request": {
+          "stuck_minutes": 30
+        },
+        "response": {
+          "orders": [
+            {
+              "id": 1,
+              "status": "ORDER_STATUS_RESERVING",
+              "total": "1200"
+            },
+            {
+              "id": 6
+            },
+            {
+              "id": 4
+            },
+            {
+              "id": 2
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "order.order-saga",
+    "method": "OrderSaga",
+    "summary": "下单的 saga。按状态发命令给 inventory / payment、收它们的回答、失败时释放库存再取消订单(状态机: 收到 inventory.committed / inventory.released / inventory.reservation_failed / inventory.reserved / payment.failed / payment.succeeded;超时由扫描任务驱动)",
+    "path": "/order.order.v1.OrderMessageHandlerService/OrderSaga",
+    "pattern": "machine",
+    "cases": []
+  },
+  {
+    "id": "order.place-order",
+    "method": "PlaceOrder",
+    "summary": "下单。订单和明细一起写进去(订单金额 = 明细金额之和),订单进入 RESERVING,同时发出 inventory.reserve",
+    "path": "/order.order.v1.OrderService/PlaceOrder",
+    "pattern": "command",
+    "cases": [
+      {
+        "name": "下单 → 订单 + 明细,金额 = 明细之和,发出 inventory.reserve",
+        "request": {
+          "customer_id": 7,
+          "items": [
+            {
+              "line_no": 1,
+              "price": "1000.50",
+              "qty": 2,
+              "sku": "BEAN-001"
+            },
+            {
+              "line_no": 2,
+              "price": "0.25",
+              "qty": 1,
+              "sku": "TEA-001"
+            }
+          ]
+        },
+        "response": {
+          "created_at": "2026-11-22T01:00:00Z",
+          "order_id": 1,
+          "status": "ORDER_STATUS_RESERVING"
+        }
+      }
+    ]
+  }
+]
