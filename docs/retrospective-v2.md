@@ -1,6 +1,7 @@
 # storefront v2 复盘（M7）
 
-> 版本 v0.1（2026-11-23）· 状态：**草稿，独立扩容的数字待补**（§2.4 占位）
+> 版本 v0.2（2026-11-23）· v0.2：独立扩容的结果（§2.4，#21）；更正"小新和 winpc 在同一个局域网"的说法
+> 版本 v0.1（2026-11-23）· 草稿，独立扩容待补
 > 范围：设计书 [`design/v2-microservices.md`](design/v2-microservices.md)（v0.4.1）的 M0–M6；M6 的做法和原始结果见
 > [`m6-verification.md`](m6-verification.md)。
 > 写法：每个结论都给 PR 编号或测量值；测不出来的写"没测"，不写"应该可以"。
@@ -9,7 +10,7 @@
 
 ## 0. 一句话结论
 
-从设计评审通过（#8，2026-11-22 10:56 JST）到第三个承诺测完（2026-11-23 18:06 JST）大约 31 小时。**四个承诺里三个有测量证据通过（独立部署、故障隔离、最终一致），外加"不超卖"；独立扩容第一次在小新上没能证明，正在 winpc 的性能环境重测**（§2.4）。
+从设计评审通过（#8，2026-11-22 10:56 JST）到四个承诺全部测完（2026-11-23 晚）大约一天半。**四个承诺里三个有测量证据通过（独立部署、故障隔离、最终一致），外加"不超卖"。第四个（独立扩容）FAIL：只扩 order + inventory，拐点是 1.0×（45/s → 45/s）。这次实验找到了精确、可修的根因：运行时在每个写 outbox 的事务里发 NOTIFY，导致提交在每个 Postgres 实例上串行**（§2.4）。
 后端 5 个服务的 29 个 API 里 28 个由 api-factory 确定性生成并带着验证证据交付；进镜像的代码里手写占 5.2%，其中九成是一个工厂缺口（G31）的绕过代码复制了 5 份。
 但 **生产上的下单仍然是 v1**：设计书里的绞杀步骤 M3–M5 没有在生产做，v2 的整套服务只在 lab 上跑过验证。
 
@@ -31,7 +32,7 @@
 | 11-23 12:00 – 13:04 | 独立部署（第 1 次 FAIL，第 2 次 PASS）、容量测试（未证明）、不超卖（PASS） | #16、#18、#19；gitops-manifests #132、#133、#134、#135 |
 | 11-23 15:33 | catalog 上生产：prod 的 web 浏览走 catalog | gitops-manifests #136、#137、#138；infrastructure-live #32 |
 | 11-23 16:48 – 18:06 | 故障实验：最终一致 PASS；故障隔离 FAIL、FAIL、第 3 次通过 | `scripts/m6/out/` 的报告（§2.2、§2.3） |
-| 11-23 晚 | 独立扩容在 winpc 性能环境重测 | §2.4（待补） |
+| 11-23 晚 | 独立扩容在 winpc 性能环境重测：耐久 Postgres 上 1.0×（FAIL），根因 = outbox 的 NOTIFY 提交锁 | #21 |
 
 ---
 
@@ -44,7 +45,7 @@
 | **独立部署** | 发布一个服务，其他零变更、零重启；旅程 SLO 不受影响 | ✅ PASS（第 2 次） | payment `ef9c9b8 → 43542ad`：其他工作负载 0 变更 / 0 替换 / 0 重启；453 单 60 s 内 100% 终态；浏览 100%，下单 99.81%（524 单里 1 单超时，在发布之前） |
 | **故障隔离** | inventory 完全宕机时浏览 ≥ 99.5%，已提交订单不丢 | ✅ PASS（第 3 次，有保留，见 §2.2） | inventory 停 10.0 分钟：浏览 100%（12061）、下单受理 100%（1206）；恢复后 28 s 全部终态；0 丢单、0 重复扣款、0 超卖、DLQ 0 |
 | **最终一致** | payment 停 10 分钟，恢复后 5 分钟内全部终态；不重复扣款、不超卖 | ✅ PASS | 1184 单积压在 CHARGING，恢复后 **99 s** 全部终态；2161 单 0 丢、0 重复扣款、0 已取消却扣款、0 超卖、outbox 全空、DLQ 0 |
-| **独立扩容** | 只扩 order + inventory，下单拐点 ≥ 2× | ⏳ **待补**（§2.4） | 第一次（小新）：未证明 |
+| **独立扩容** | 只扩 order + inventory，下单拐点 ≥ 2× | ❌ **FAIL**（§2.4） | 耐久 Postgres：拐点 45/s（1 / 1 副本）→ 45/s（3 / 3）= **1.0×**；瓶颈是 outbox 的 NOTIFY 让提交在每个实例上串行，CPU 空闲（order 0.22 / 0.5 核）。诊断（`synchronous_commit=off`）：200/s → 400/s = 2.0×，不算通过。所有运行 0 服务端错误、0 DLQ |
 | （附加）不超卖 | 秒杀时库存不为负 | ✅ PASS | 200 件库存，30 单/s × 40 s 涌入 1201 单 → 恰好 200 CONFIRMED、1001 CANCELLED，账目平衡 |
 
 ### 2.1 独立部署：第 1 次的 FAIL 留着
@@ -69,18 +70,37 @@
 
 payment 停 10.0 分钟期间订单在 CHARGING 堆到 1184；saga 按 30 s / 60 s 重发了 6350 次命令，迟到的回答（例：payment 对重发的扣款命令的第二次回答）被忽略 6109 次（设计如此：状态机的条件更新 `WHERE 状态 = 从`）。99 s 后全部终态。没有重复扣款靠的是 payment 的幂等新建（订单号唯一），不是 RabbitMQ 的投递保证。
 
-### 2.4 独立扩容 —— 【占位：待补数字】
+### 2.4 独立扩容：FAIL（耐久的 Postgres 上 1.0×），根因已定位
 
-> **TODO（winpc 性能环境的结果到了之后填写）**
->
-> - 环境：被测系统 = winpc WSL 里的 v2 性能环境；压测机 = 小新；走局域网（不走 Tailscale）
-> - 基线（order、inventory 各 1 副本）的拐点：`__` 单/s（确认次数 `__`）
-> - 扩容后（order、inventory 各 `__` 副本）的拐点：`__` 单/s
-> - 倍数：`__`×（过关线 2×）→ 判定：`__`
-> - 拐点处的瓶颈（CPU / Postgres / relay / 行锁）：`__`
-> - 和第一次的差别：`__`
+结果和做法的原文在 [`m6-verification.md`](m6-verification.md) 的 "Independent scaling on winpc" 一节（#21）；环境在 [`perf/winpc/`](../perf/winpc)。
 
-**第一次（2026-11-23 12:59，小新）的记录**：1 副本时 10/s 稳、20/s 一次通过一次失败（unstable）、25/s 破；order + inventory ×3 时 20/s 两次都稳、25/s 破。`check.py` 打印了 2.00×，**只是因为基线的 20/s 不稳**，不能算证明。两边都在 25/s 破在"saga 跟得上"（99% 订单 10 s 内终态）这一条，当时小新 8 个线程用了约 99%，单个 Postgres（5 个库，每单约 10 个事务）1.8 核。也就是说在这台机器上限制拐点的是整机 CPU 和共享的数据库，不是 order / inventory 的副本数。
+**环境**：被测系统 = winpc 的 WSL 里的性能环境（12 vCPU / 20 GB，Docker Compose）。order、inventory、其余三个服务分别用独立的 Postgres 16：pg-order、pg-inventory、pg-rest。每个副本的 CPU 上限是 order 0.5 核、inventory 0.5 核。HAProxy 轮询全部副本。压测机 = 小新上的 k6。**两台机器在不同的地点**（不同的子网和公网出口），压力走 Tailscale 的直连路径（约 77 ms RTT），路径上没有 Kubernetes NodePort。判定看服务端指标。每一步 30 s 预热 + 60 s 测量，**拐点 = 两次都守住的最高速率**。
+
+| 运行 | Postgres | order / inventory 副本 | 拐点 | 倍数 |
+|---|---|---|---|---|
+| durable-base | 耐久（fsync、`synchronous_commit=on`） | 1 / 1 | **45/s** | |
+| durable-x3 | 耐久 | 3 / 3 | **45/s** | **1.0× → FAIL** |
+| async-base（诊断） | `synchronous_commit=off` | 1 / 1 | 200/s | |
+| async-x3（诊断） | `synchronous_commit=off` | 3 / 3 | 400/s | 2.0×（**不算通过**：放弃了耐久性） |
+
+所有运行的每一步：服务端错误 0、DLQ 0、k6 的下单受理 100%。
+
+**根因**（实验找到的，不是推测）：
+- 卡在拐点时没有任何东西接近 CPU 上限：order 用了 0.22 / 0.5 核，pg-order 0.26 / 2 核，整机 2 / 12 核。
+- pg-order 上大多数活跃连接在 `commit` 时等 `Lock / object`。`pg_locks` 显示 `pg_database` 0 上的 `AccessExclusiveLock`。
+- 原因是运行时 api-factory-runtime v0.5.1 的 `outbox.Writer.Write` 在**每个写 outbox 的事务里**都调用 `pg_notify` 去唤醒中继。发过 NOTIFY 的事务在提交时要拿这把全局锁，一直持有到它的 WAL 刷盘（fdatasync 约 1.8 ms）。
+- 结果是写 outbox 的提交在**每个 Postgres 实例上一个接一个**执行。order 库里，PlaceOrder 和 saga 的每一步都写 outbox。
+- 这个上限属于数据库，不属于副本：副本加到 3 个只是让更多事务排在同一把锁前面，50/s 时下单的 p95 从 0.49 s 变成了 2.2 s。
+
+**诊断**：关掉 `synchronous_commit` 之后，提交不再拿着锁等刷盘：
+- 单副本的拐点从 45/s 升到 200/s，限制变成 order 自己的 CPU（0.50 / 0.5 核）。
+- 这时扩 order + inventory **正好 2.0×**（400/s），直到 pg-order / pg-inventory 用满各自的 2 核。
+
+也就是说服务本身是能独立扩容的，挡住的是 outbox 的 NOTIFY。但诊断丢掉了崩溃时最后约 600 ms 的提交，对订单不可接受，所以**判定仍是 FAIL**。
+
+**修法**：把 NOTIFY 移出写事务（运行时的 outbox）。可以在提交之后再通知，也可以只靠中继已有的每秒轮询，或者只在中继空闲时通知。然后用 `perf/winpc/perf.sh` 重跑同一个测试。
+
+**第一次（2026-11-23 12:59，小新）的记录**：1 副本时 10/s 稳、20/s 一次通过一次失败（unstable）、25/s 破；order + inventory ×3 时 20/s 两次都稳、25/s 破。`check.py` 打印了 2.00×，**只是因为基线的 20/s 不稳**，不能算证明。两边都在 25/s 破在"saga 跟得上"（99% 订单 10 s 内终态）这一条，当时小新 8 个线程用了约 99%，单个 Postgres（5 个库，每单约 10 个事务）1.8 核。当时的结论是"整机 CPU 和共享的数据库"；现在知道，共享数据库那一半就是上面的 NOTIFY 提交锁：5 个库在同一个 Postgres 实例里，共用同一把锁。
 
 设计上的已知限制（无论在哪测都成立）：outbox 中继每个库一个 leader，扩 order 增加的是 PlaceOrder 处理和 saga 的消费者，不是中继；inventory 对同一个 SKU 的扣减在行锁上串行，副本再多也一样。
 
@@ -161,10 +181,11 @@ payment 停 10.0 分钟期间订单在 CHARGING 堆到 1184；saga 按 30 s / 60
 | 5.4 | M6 期间观察到中继的 leader 抖动 | 运行时 `outbox/relay.go`（v0.5.1）的 `round`：一批消息的发布和 confirm 共用一个 `ConfirmTimeout` 的 context（`bctx`）；**confirm 超时之后，同一个已经过期的 `bctx` 又被拿去 `UPDATE factory_outbox`（标记已发送 / `markFailed`）** → 写库失败 → 被当作数据库错误结束这一任期 → 放弃 leader 再竞选 | **未修，也还没记进 GAPS**（§6） | 超时之后的清理要用新的 context |
 | 5.5 | 一个 PR 在 verify 还没跑完时被自动合并（api-factory #35） | 合并脚本只判断"没有失败的检查"，pending 也算通过 | 脚本改成"所有检查 pass 才合并、超时仍 pending = 不合并"，并在 main 补跑全量闸门 | 合并条件写成正面的"全部通过"，不要写成"没有失败" |
 | 5.6 | AI 式样审查一个 PR 来回 3 轮不收敛 | 本地审查和 CI 审查对同一个问题措辞不同，答案按原文匹配；轮次历史不共享；回答照抄选项原文、与实现不符被下一轮判矛盾 | api-factory #48：轮次历史共享（提交的 ledger）、按问题 id 匹配答案、prompt 列出全部已答、`max_rounds` 上限、`keep:` 按实际行为回答 | 不确定的检查要有收敛机制（历史 + 上限），否则会变成无限循环的闸门 |
-| 5.7 | 故障隔离前两次 FAIL（用户侧 96.3% / 96.4%） | 测量链路：会频繁变动后端的 NodePort + 经 Tailscale 访问（推断，§2.2） | 第 3 次去掉 inventory 的 NodePort；之后的压测走局域网 | 可用性以服务端指标为主判定；压测机和被测系统之间不要放 overlay 网络 |
+| 5.7 | 故障隔离前两次 FAIL（用户侧 96.3% / 96.4%） | 测量链路：会频繁变动后端的 NodePort + 经 Tailscale 访问（推断，§2.2） | 第 3 次去掉 inventory 的 NodePort。winpc 的容量测试也走 Tailscale（两台机器不在同一个地点，没有局域网可走），但用的是直连路径，路径上没有 NodePort，并且按服务端指标判定 | 可用性以服务端指标为主判定；测量路径上不要放会频繁变动后端的 NodePort |
 | 5.8 | GitHub Actions 当月花费上限用完，所有任务 2 秒失败 | 一夜十几个 PR × 每次推送都重跑约 40 分钟的 verify（margin 160+ 个变异） | 用户决定 api-factory 公开（MIT，api-factory #46），托管 runner 免费；margin 分 4 片并行（#43） | CI 的费用也是容量；长闸门要分片、避免无谓重跑 |
-| 5.9 | 独立扩容第一次没能证明 | 小新（4 核 8 线程、7 GB）上被测系统、Argo CD、Prometheus、k3s 共用 CPU，单个 Postgres 承担 5 个库 | 设备角色重新划分（用户确认）：小新 = 功能 / 故障实验 + 压测机，不放生产复制品（gitops-manifests #140、#143、#144）；winpc = AI + WSL 里的性能环境 | 容量结论只对测的那台机器成立；"副本 ×3"在共享 CPU 上测不出独立扩容 |
+| 5.9 | 独立扩容第一次没能证明 | 小新（4 核 8 线程、7 GB）上被测系统、Argo CD、Prometheus、k3s 共用 CPU，单个 Postgres 承担 5 个库 | 设备角色重新划分（用户确认）：小新 = 功能 / 故障实验 + 压测机，不放生产复制品（gitops-manifests #140、#143、#144）；winpc = AI + WSL 里的性能环境 | 容量结论只对测的那台机器成立；"副本 ×3"在共享 CPU 上测不出独立扩容。换到独立的性能环境之后才看清真正的瓶颈（§5.11） |
 | 5.10 | 故障注入（Chaos Mesh）第一次被会话的权限策略拒绝 | 注入故障是有破坏性的操作，自动化代理不能自己批准 | 工具先做到 `--preflight` 通过，由用户明确批准后再执行 | 破坏性操作的审批是流程的一部分，计划里要留出等待批准的时间 |
+| 5.11 | 独立扩容 FAIL（耐久 Postgres 上 1.0×） | 运行时 v0.5.1 的 `outbox.Writer.Write` 在每个写 outbox 的事务里调用 `pg_notify`；发过 NOTIFY 的事务提交时持有 `pg_database` 0 的全局锁直到 WAL 刷盘 → 写 outbox 的提交在每个 Postgres 实例上串行（§2.4） | **未修**：把 NOTIFY 移出写事务，然后重跑 `perf/winpc/perf.sh` | 工厂的验证（差分、故障注入、变异）都是功能性的，测不出性能问题。"每个事务唤醒一次中继"这种看起来无害的设计，只有在负载下、而且 CPU 空闲时去看锁等待才看得见 |
 
 小插曲（没有造成影响）：catalog prod 晋级时 web 滚动更新期间内部探测失败 1 次（旧 Pod 先关了监听，endpoints 还没摘掉；web-probe 预算 100% → 98.7%，无告警）。待做：web 加 preStop / 优雅退出。
 
@@ -188,6 +209,7 @@ payment 停 10.0 分钟期间订单在 CHARGING 堆到 1184；saga 按 30 s / 60
 
 | 缺口 | 为什么值得 |
 |---|---|
+| **新：outbox 的 NOTIFY 在写事务里**（§5.11） | 独立扩容的唯一阻碍 |
 | **G31** 打包模板没有迁移 | 手写 571 行里约 505 行是它的绕过代码 |
 | **新：中继 confirm 超时后复用过期的 context**（§5.4） | leader 抖动；要先记进 GAPS，再在运行时修 |
 | **G33** 工具缺失时 `check` 退出码 0 | 消费方的 CI 漏装 sqlc 也是绿的 |
@@ -224,14 +246,15 @@ payment 停 10.0 分钟期间订单在 CHARGING 堆到 1184；saga 按 30 s / 60
 | D16 | Tempo 放手机（独立第三方，不进生产请求路径） | 用户 | 手机挂了生产不受影响 | slo-platform v0.1.4；gitops-manifests #141、#142 |
 | D17 | api-factory 公开（MIT），外部 PR 一律要批准 | 用户 | Actions 额度用完；不申请专利 | api-factory #46 |
 | D18 | 设备角色重新划分；独立扩容改到 winpc 性能环境重测 | 用户确认 | 小新的 CPU 和单 Postgres 是瓶颈（§2.4） | gitops-manifests #140、#143、#144 |
+| D19 | 独立扩容记为 FAIL，不把 `synchronous_commit=off` 下的 2.0× 当作通过 | 代为 | 承诺是对耐久的系统说的；崩溃时丢掉最后约 600 ms 的提交，对订单不可接受（除非用户另行决定） | #21 |
 
 ---
 
 ## 8. 下一步
 
-1. **补完独立扩容**（§2.4），更新本文和 `m6-verification.md` 的结果表（加上故障实验的结果）。
+1. **先修 NOTIFY 提交锁，再测独立扩容**：在运行时的 outbox 里把 NOTIFY 移出写事务，然后用 `perf/winpc/perf.sh` 在耐久 Postgres 上重跑。`m6-verification.md` 的结果表补上故障实验的结果。
 2. **生产的绞杀**：M3 order 接管下单（web 不再直接写库，worker 仍在）→ M4 saga + RabbitMQ 上笔记本、worker 下线 → M5。每一步照 catalog 的流程（备份 → staging 浸泡 → 开关 → prod → 观察）。上生产之前先解决 RabbitMQ 每服务一个用户（需要密钥手段）。
-3. **运行时**：修 §5.4 的 context 复用；加 span 导出（OTLP，没有端点时关闭），让 v2 在 Tempo 里可见。
+3. **运行时**：§5.11 的 NOTIFY（见第 1 条）；修 §5.4 的 context 复用；加 span 导出（OTLP，没有端点时关闭），让 v2 在 Tempo 里可见。
 4. **工厂**：G31（删掉 5 份手写迁移）、G33、J1（R6 或手写，二选一要明确）。
 5. 测量工具：`check.py` 的期限取消行、报告进仓库；把 G26 的跨服务不变量做成 CI 里可跑的缩短时钟版本。
 6. web 的优雅退出（preStop），S1 收尾删 `services/api`。
