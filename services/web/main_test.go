@@ -23,6 +23,25 @@ func TestPageShowsBothVersions(t *testing.T) {
 	}
 }
 
+// The call to the api carries the page request's trace (traceparent), with or without a tracing backend.
+func TestPagePropagatesTrace(t *testing.T) {
+	obs.Tracing(context.Background(), "web", "") // no endpoint: no-op provider, the propagator only
+	const parent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	var got string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("traceparent")
+		w.Write([]byte(`{"version":"a1","products":[]}`))
+	}))
+	defer api.Close()
+	m := obs.New()
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("traceparent", parent)
+	m.Instrument(newMux("w1", api.URL, m.Client("api", api.Client()), nil, m)).ServeHTTP(httptest.NewRecorder(), req)
+	if !strings.HasPrefix(got, "00-4bf92f3577b34da6a3ce929d0e0e4736-") {
+		t.Fatalf("traceparent at the api: %q", got)
+	}
+}
+
 func TestPageWithoutProductsIsDegraded(t *testing.T) {
 	m := obs.New()
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { http.Error(w, "down", 503) }))

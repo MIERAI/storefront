@@ -10,6 +10,8 @@
 //	  orders_processed_total                 orders done by this pod
 //	  order_processing_delay_seconds         histogram: created → done (time in the queue + the work)
 //	  worker_errors_total                    failed attempts (database unreachable, …): the order stays pending
+//	traces (internal/obs Tracing, OTEL_* environment): "process order" per order (internal/orders Process) with its
+//	queries; flushed on SIGTERM
 package main
 
 import (
@@ -90,6 +92,7 @@ func duration(env string, def time.Duration) time.Duration {
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
+	defer obs.Tracing(context.Background(), "worker", os.Getenv("APP_VERSION"))(context.Background()) // flush on stop
 	m := obs.New()
 	m.Add("orders_processed_total", 0)
 	m.Add("worker_errors_total", 0)

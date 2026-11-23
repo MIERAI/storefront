@@ -7,6 +7,7 @@
 //	               by the worker; 400 for a bad amount, 503 when the order cannot be stored
 //	GET /healthz → ok (header X-App-Version)
 //	:9090 /metrics (internal/obs); calls to the api are counted as upstream "api"
+//	traces (internal/obs Tracing, OTEL_* environment): server spans, the call to the api, the order INSERT
 //
 // web also watches the order pipeline from the outside (internal/orders Check, every CHECK_INTERVAL): a gauge
 // exported by the worker would vanish with the last worker, exactly when it matters.
@@ -55,9 +56,13 @@ func newMux(version, apiURL string, client *http.Client, create createOrder, m *
 		w.Header().Set("X-App-Version", version)
 		w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		var p products
-		resp, err := client.Get(apiURL + "/products")
+		req, err := http.NewRequestWithContext(r.Context(), "GET", apiURL+"/products", nil) // r's trace continues in the api
+		var resp *http.Response
+		if err == nil {
+			resp, err = client.Do(req)
+		}
 		if err == nil {
 			if resp.StatusCode != http.StatusOK || json.NewDecoder(resp.Body).Decode(&p) != nil {
 				p = products{}
@@ -131,6 +136,7 @@ func duration(env string, def time.Duration) time.Duration {
 
 func main() {
 	version, apiURL := os.Getenv("APP_VERSION"), os.Getenv("API_URL")
+	obs.Tracing(context.Background(), "web", version) // no graceful stop here: the last batch (≤5s of spans) is lost on SIGTERM
 	m := obs.New()
 	m.Add("orders_created_total", 0)
 	m.Add("orders_overdue_total", 0)

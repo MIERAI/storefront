@@ -13,6 +13,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const schema = `
@@ -29,13 +32,14 @@ CREATE INDEX IF NOT EXISTS orders_pending ON orders (created_at) WHERE status = 
 `
 
 // Open: a pool on url (e.g. DATABASE_URL), at most 4 connections per pod. It connects lazily: no database, no error
-// until it is used.
+// until it is used. Queries made inside a trace are spans (queryTracer).
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, err
 	}
 	cfg.MaxConns = 4
+	cfg.ConnConfig.Tracer = queryTracer{}
 	return pgxpool.NewWithConfig(ctx, cfg)
 }
 
@@ -63,28 +67,46 @@ type Order struct {
 
 // Process claims the oldest pending order no other worker holds, runs work on it inside the transaction and marks
 // it done. ok = false: nothing to do. An error from work (or a crash) rolls back: the order is pending again.
+//
+// A claimed order is traced: the span "process order" (order.id) covers the work, the UPDATE and the commit — the
+// claim itself is not part of it (a worker polling an empty queue makes no trace).
 func Process(ctx context.Context, db *pgxpool.Pool, work func(context.Context, Order) error) (o Order, ok bool, err error) {
-	err = pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
-		err := tx.QueryRow(ctx, `SELECT id, amount FROM orders WHERE status = 'pending'
-			ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&o.ID, &o.Amount)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		}
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return o, false, err
+	}
+	defer tx.Rollback(ctx) // after Commit: a no-op
+	err = tx.QueryRow(ctx, `SELECT id, amount FROM orders WHERE status = 'pending'
+		ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`).Scan(&o.ID, &o.Amount)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return o, false, nil
+	}
+	if err != nil {
+		return o, false, err
+	}
+	ctx, span := tracer.Start(ctx, "process order", trace.WithAttributes(attribute.Int64("order.id", o.ID)))
+	defer func() {
 		if err != nil {
-			return err
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else {
+			span.SetAttributes(attribute.Float64("order.delay_seconds", o.Delay.Seconds()))
 		}
-		if err := work(ctx, o); err != nil {
-			return err
-		}
-		var secs float64
-		if err := tx.QueryRow(ctx, `UPDATE orders SET status = 'done', processed_at = now() WHERE id = $1
-			RETURNING extract(epoch FROM processed_at - created_at)::float8`, o.ID).Scan(&secs); err != nil {
-			return err
-		}
-		o.Delay, ok = time.Duration(secs*float64(time.Second)), true
-		return nil
-	})
-	return o, ok && err == nil, err
+		span.End()
+	}()
+	if err = work(ctx, o); err != nil {
+		return o, false, err
+	}
+	var secs float64
+	if err = tx.QueryRow(ctx, `UPDATE orders SET status = 'done', processed_at = now() WHERE id = $1
+		RETURNING extract(epoch FROM processed_at - created_at)::float8`, o.ID).Scan(&secs); err != nil {
+		return o, false, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return o, false, err
+	}
+	o.Delay = time.Duration(secs * float64(time.Second))
+	return o, true, nil
 }
 
 // State of the pipeline, as Check sees it. Through is the freshness watermark: every order created before it is
