@@ -5,7 +5,7 @@
 //
 //   k6 run -e CATALOG_URL=... -e INVENTORY_URL=... [-e STOCK=100000] seed.js
 import { check, sleep } from 'k6';
-import { ALL, SCARCE, CATALOG, INVENTORY, base, call } from './lib.js';
+import { ALL, SCARCE, CATALOG, INVENTORY, base, callRetry as call } from './lib.js';
 
 export const options = { vus: 1, iterations: 1, thresholds: { checks: ['rate==1'] } };
 

@@ -60,6 +60,17 @@ export function lines(list, n, maxQty) {
   return out;
 }
 
+// call() again while the network (not the service) failed: status 0 = no answer (timeout, reset). For setup / seeding
+// only: the load scripts count every failure, since users see them too.
+export function callRetry(url, service, method, body, tries) {
+  let r;
+  for (let i = 0; i < (tries || 5); i++) {
+    r = call(url, service, method, body);
+    if (r.status !== 0) return r;
+  }
+  return r;
+}
+
 export function summaryWriter(extra) {
   // handleSummary: the end-of-test summary as JSON to SUMMARY (a path), plus the usual text on stdout.
   return function (data) {
