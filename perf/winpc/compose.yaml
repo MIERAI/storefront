@@ -1,0 +1,222 @@
+# storefront v2 performance environment (winpc, WSL distro `ci`): the system under test of the independent-scaling
+# capacity test (docs/m6-verification.md, "Independent scaling on winpc"). The released images at the tags v2-lab runs
+# (gitops-manifests v2/overlays/lab), RabbitMQ, three Postgres instances, an HAProxy in front of the entry points,
+# a cgroup exporter + Prometheus. Driven by perf.sh (from the Mac); the load comes from xiaoxin (knee.py + k6).
+#
+#   docker compose -p sf2perf up -d --wait                                    # baseline: one of each
+#   docker compose -p sf2perf up -d --wait --scale order=3 --scale inventory=3  # scaled
+#
+# Databases: order and inventory each get their own Postgres (pg-order, pg-inventory): the test is about scaling
+# them, so the database must not be the shared bottleneck it was on the lab (one CNPG for five databases). catalog,
+# payment and notification share pg-rest. Every container has a CPU limit (*_CPUS, per replica): "scale only order +
+# inventory" means more CPU for exactly those two, everything else fixed. Sizes in perf.env (sourced by perf.sh).
+#
+# Nothing here is a secret: the passwords below only exist on this host's private compose network (no database or
+# broker port is published). Published: haproxy 18080-18082 (order / catalog / inventory), prometheus 19090.
+name: sf2perf
+
+x-svc-env: &svc-env
+  AUTH_MODE: none
+  AMQP_URL: amqp://v2:v2perf@rabbitmq:5672/v2-perf
+  PAGE_TOKEN_KEY: sf2perf-page-token-key   # stable across replicas
+  REQUEST_TIMEOUT_MS: "3000"
+
+x-svc: &svc
+  restart: unless-stopped
+  depends_on:
+    topology: { condition: service_completed_successfully }
+  logging: { driver: json-file, options: { max-size: 10m, max-file: "2" } }
+
+x-migrate: &migrate
+  restart: "no"
+  command: [migrate, up]
+
+x-pg: &pg
+  image: mirror.gcr.io/library/postgres:16
+  restart: unless-stopped
+  shm_size: 512m
+  environment: { POSTGRES_USER: sf, POSTGRES_PASSWORD: sfperf, POSTGRES_DB: postgres }
+  # durable defaults (fsync, synchronous_commit on); PG_SYNC_COMMIT=off only for the diagnostic run (perf.sh up
+  # sync=off: a commit no longer waits for its WAL flush; see docs/m6-verification.md). Sized for a few hundred tx/s
+  command: [postgres, -c, max_connections=400, -c, "synchronous_commit=${PG_SYNC_COMMIT:-on}", -c, shared_buffers=512MB, -c, effective_cache_size=1GB,
+            -c, max_wal_size=4GB, -c, checkpoint_timeout=15min, -c, wal_buffers=16MB,
+            -c, track_io_timing=on, -c, log_min_duration_statement=1000]
+  healthcheck:
+    test: [CMD, pg_isready, -U, sf, -d, postgres]
+    interval: 2s
+    timeout: 3s
+    retries: 60
+
+services:
+  # ---- infrastructure --------------------------------------------------------------------------------------------
+  rabbitmq:
+    image: mirror.gcr.io/library/rabbitmq:3.13.7-management
+    restart: unless-stopped
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: v2
+      RABBITMQ_DEFAULT_PASS: v2perf
+      RABBITMQ_DEFAULT_VHOST: v2-perf
+      # schedulers = the CPU limit (not the host's 12 threads), no busy-waiting (it burns the CPU quota)
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "+S ${RABBITMQ_SCHED:-2}:${RABBITMQ_SCHED:-2} +sbwt none +sbwtdcpu none +sbwtdio none"
+    volumes:
+      - ./rabbitmq.conf:/etc/rabbitmq/conf.d/90-perf.conf:ro
+      - rabbitmq-data:/var/lib/rabbitmq
+    cpus: ${RABBITMQ_CPUS:-2}
+    mem_limit: 2g
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_port_connectivity]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 10s
+
+  pg-order:
+    <<: *pg
+    cpus: ${PG_ORDER_CPUS:-2}
+    volumes: [pg-order:/var/lib/postgresql/data]
+  pg-inventory:
+    <<: *pg
+    cpus: ${PG_INVENTORY_CPUS:-2}
+    volumes: [pg-inventory:/var/lib/postgresql/data]
+  pg-rest:
+    <<: *pg
+    cpus: ${PG_REST_CPUS:-1.5}
+    volumes: [pg-rest:/var/lib/postgresql/data]
+
+  # one-shot: create the databases (pg-rest holds three)
+  createdb:
+    image: mirror.gcr.io/library/postgres:16
+    restart: "no"
+    environment: { PGUSER: sf, PGPASSWORD: sfperf }
+    entrypoint: [sh, -ec]
+    command:
+      - |
+        mk() { psql -h "$$1" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$$2'" | grep -q 1 || createdb -h "$$1" "$$2"; }
+        mk pg-order orders; mk pg-inventory inventory; mk pg-rest catalog; mk pg-rest payment; mk pg-rest notification
+        echo databases ready
+    depends_on:
+      pg-order: { condition: service_healthy }
+      pg-inventory: { condition: service_healthy }
+      pg-rest: { condition: service_healthy }
+
+  # the system's messaging topology before any service starts (as gitops-manifests v2/base/topology.yaml)
+  topology:
+    image: ghcr.io/mierai/storefront-topology:${TOPOLOGY_TAG:-7f296d2}
+    restart: "no"
+    environment: { AMQP_URL: "amqp://v2:v2perf@rabbitmq:5672/v2-perf" }
+    command: [topology, apply, --file, /topology.json, --timeout, 120s]
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+
+  # ---- migrations (the image's own `migrate up`, goose) -----------------------------------------------------------
+  migrate-catalog:
+    <<: *migrate
+    image: ghcr.io/mierai/storefront-catalog:${CATALOG_TAG:-3182342}
+    environment: { DATABASE_URL: "postgres://sf:sfperf@pg-rest:5432/catalog?sslmode=disable" }
+    depends_on: { createdb: { condition: service_completed_successfully } }
+  migrate-inventory:
+    <<: *migrate
+    image: ghcr.io/mierai/storefront-inventory:${INVENTORY_TAG:-7f296d2}
+    environment: { DATABASE_URL: "postgres://sf:sfperf@pg-inventory:5432/inventory?sslmode=disable" }
+    depends_on: { createdb: { condition: service_completed_successfully } }
+  migrate-payment:
+    <<: *migrate
+    image: ghcr.io/mierai/storefront-payment:${PAYMENT_TAG:-43542ad}
+    environment: { DATABASE_URL: "postgres://sf:sfperf@pg-rest:5432/payment?sslmode=disable" }
+    depends_on: { createdb: { condition: service_completed_successfully } }
+  migrate-notification:
+    <<: *migrate
+    image: ghcr.io/mierai/storefront-notification:${NOTIFICATION_TAG:-7f296d2}
+    environment: { DATABASE_URL: "postgres://sf:sfperf@pg-rest:5432/notification?sslmode=disable" }
+    depends_on: { createdb: { condition: service_completed_successfully } }
+  migrate-order:
+    <<: *migrate
+    image: ghcr.io/mierai/storefront-order:${ORDER_TAG:-7f296d2}
+    environment: { DATABASE_URL: "postgres://sf:sfperf@pg-order:5432/orders?sslmode=disable" }
+    depends_on: { createdb: { condition: service_completed_successfully } }
+
+  # ---- the five services (scalable: no container_name, no published port) ---------------------------------------
+  catalog:
+    <<: *svc
+    image: ghcr.io/mierai/storefront-catalog:${CATALOG_TAG:-3182342}
+    environment: { <<: *svc-env, DATABASE_URL: "postgres://sf:sfperf@pg-rest:5432/catalog?sslmode=disable" }
+    cpus: ${CATALOG_CPUS:-0.5}
+    mem_limit: 256m
+    depends_on:
+      topology: { condition: service_completed_successfully }
+      migrate-catalog: { condition: service_completed_successfully }
+  inventory:
+    <<: *svc
+    image: ghcr.io/mierai/storefront-inventory:${INVENTORY_TAG:-7f296d2}
+    environment: { <<: *svc-env, DATABASE_URL: "postgres://sf:sfperf@pg-inventory:5432/inventory?sslmode=disable" }
+    cpus: ${INVENTORY_CPUS:-1}
+    mem_limit: 256m
+    depends_on:
+      topology: { condition: service_completed_successfully }
+      migrate-inventory: { condition: service_completed_successfully }
+  payment:
+    <<: *svc
+    image: ghcr.io/mierai/storefront-payment:${PAYMENT_TAG:-43542ad}
+    environment: { <<: *svc-env, DATABASE_URL: "postgres://sf:sfperf@pg-rest:5432/payment?sslmode=disable" }
+    cpus: ${PAYMENT_CPUS:-1}
+    mem_limit: 256m
+    depends_on:
+      topology: { condition: service_completed_successfully }
+      migrate-payment: { condition: service_completed_successfully }
+  notification:
+    <<: *svc
+    image: ghcr.io/mierai/storefront-notification:${NOTIFICATION_TAG:-7f296d2}
+    environment: { <<: *svc-env, DATABASE_URL: "postgres://sf:sfperf@pg-rest:5432/notification?sslmode=disable" }
+    cpus: ${NOTIFICATION_CPUS:-0.5}
+    mem_limit: 256m
+    depends_on:
+      topology: { condition: service_completed_successfully }
+      migrate-notification: { condition: service_completed_successfully }
+  order:
+    <<: *svc
+    image: ghcr.io/mierai/storefront-order:${ORDER_TAG:-7f296d2}
+    environment: { <<: *svc-env, DATABASE_URL: "postgres://sf:sfperf@pg-order:5432/orders?sslmode=disable" }
+    cpus: ${ORDER_CPUS:-1}
+    mem_limit: 256m
+    depends_on:
+      topology: { condition: service_completed_successfully }
+      migrate-order: { condition: service_completed_successfully }
+
+  # ---- entry point: load-balances over however many replicas DNS returns ------------------------------------------
+  haproxy:
+    image: mirror.gcr.io/library/haproxy:3.0
+    restart: unless-stopped
+    volumes: [./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro]
+    ports: ["18080:18080", "18081:18081", "18082:18082"]
+    cpus: ${HAPROXY_CPUS:-1}
+    mem_limit: 256m
+    depends_on: [order, catalog, inventory]
+
+  # ---- observation -----------------------------------------------------------------------------------------------
+  # CPU / memory per container from cgroup v2 (cAdvisor cannot follow Docker 29's containerd image store)
+  cgroups:
+    image: mirror.gcr.io/library/python:3.13-alpine
+    restart: unless-stopped
+    command: [python3, -u, /cgroup_exporter.py]
+    volumes:
+      - ./cgroup_exporter.py:/cgroup_exporter.py:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    cpus: 0.25
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.5.0
+    restart: unless-stopped
+    command: [--config.file=/etc/prometheus/prometheus.yml, --storage.tsdb.retention.time=30d, --web.listen-address=:9090]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["19090:9090"]
+    cpus: 1
+
+volumes:
+  rabbitmq-data:
+  pg-order:
+  pg-inventory:
+  pg-rest:
+  prometheus-data:

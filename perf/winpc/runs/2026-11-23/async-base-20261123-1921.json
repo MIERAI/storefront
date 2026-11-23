@@ -1,0 +1,1617 @@
+{
+ "label": "async-base",
+ "started": "20261123-1921",
+ "objectives": {
+  "server_err_max": 0.005,
+  "latency_min": 0.99,
+  "saga_min": 0.99,
+  "throughput_min": 0.97,
+  "client_fail_max": 0.005,
+  "dropped_max": 0.01
+ },
+ "warmup_s": 30,
+ "measure_s": 60,
+ "steps": [
+  {
+   "rate": 40,
+   "tag": 112319211,
+   "start": 1795429300.9165127,
+   "end": 1795429391.4298894,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 0.9990913221263061,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 2401.090909090909,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 2398.9090909090905,
+    "throughput_ratio": 0.9990913221263061,
+    "place_p95_s": 0.004750000000000001,
+    "place_p99_s": 0.0049499999999999995,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 40.018181818181816,
+    "completed_per_s": 39.98181818181818,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.009,
+     "inventory": 0.138,
+     "notification": 0.039,
+     "order": 0.217,
+     "payment": 0.071,
+     "pg-inventory": 0.154,
+     "pg-order": 0.243,
+     "pg-rest": 0.108,
+     "prometheus": 0.002,
+     "rabbitmq": 0.357
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "catalog": 0.003
+    },
+    "host_busy_cores": 1.9114545454545473,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 5.0,
+    "outbox_age_max_s": 0.009435,
+    "saga_in_flight_max": 1.0,
+    "queued_max": 3.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "notification": 0.004750000000000001,
+     "inventory": 0.004751080036380172,
+     "order": 0.004750719915125795,
+     "payment": 0.004752160072760346
+    }
+   },
+   "k6": {
+    "http_reqs": 3601,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 123.335548,
+    "p99_ms": null,
+    "vus_max": 40
+   },
+   "drain_s": 0.4,
+   "drained": true
+  },
+  {
+   "rate": 50,
+   "tag": 112319232,
+   "start": 1795429405.3732646,
+   "end": 1795429495.9863615,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 3000.0,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 3000.0,
+    "throughput_ratio": 1.0,
+    "place_p95_s": 0.004753457059679767,
+    "place_p99_s": 0.004953602620087337,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 50.0,
+    "completed_per_s": 50.0,
+    "cpu": {
+     "catalog": 0.004,
+     "cgroups": 0.001,
+     "haproxy": 0.011,
+     "inventory": 0.167,
+     "notification": 0.048,
+     "order": 0.259,
+     "payment": 0.088,
+     "pg-inventory": 0.192,
+     "pg-order": 0.298,
+     "pg-rest": 0.128,
+     "prometheus": 0.002,
+     "rabbitmq": 0.397
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "catalog": 0.002
+    },
+    "host_busy_cores": 2.1910909090908963,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 4.0,
+    "outbox_age_max_s": 0.008668,
+    "saga_in_flight_max": 2.0,
+    "queued_max": 6.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "notification": 0.00475,
+     "inventory": 0.0047517263310921315,
+     "order": 0.00475,
+     "payment": 0.00475
+    }
+   },
+   "k6": {
+    "http_reqs": 4501,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 169.797403,
+    "p99_ms": null,
+    "vus_max": 50
+   },
+   "drain_s": 0.4,
+   "drained": true
+  },
+  {
+   "rate": 60,
+   "tag": 112319253,
+   "start": 1795429509.2282107,
+   "end": 1795429599.654879,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 0.9993943064809205,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 3602.181818181818,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 3599.9999999999995,
+    "throughput_ratio": 0.9993943064809205,
+    "place_p95_s": 0.004757203518350015,
+    "place_p99_s": 0.004957506824385805,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 60.03636363636363,
+    "completed_per_s": 59.99999999999999,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.013,
+     "inventory": 0.193,
+     "notification": 0.057,
+     "order": 0.291,
+     "payment": 0.104,
+     "pg-inventory": 0.222,
+     "pg-order": 0.341,
+     "pg-rest": 0.151,
+     "prometheus": 0.002,
+     "rabbitmq": 0.462
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "order": 0.003
+    },
+    "host_busy_cores": 2.466363636363646,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 5.0,
+    "outbox_age_max_s": 0.013855,
+    "saga_in_flight_max": 2.0,
+    "queued_max": 5.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "payment": 0.004750000000000001,
+     "notification": 0.00475,
+     "inventory": 0.004754323422330098,
+     "order": 0.004752399959579628
+    }
+   },
+   "k6": {
+    "http_reqs": 5400,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 149.47069970000007,
+    "p99_ms": null,
+    "vus_max": 60
+   },
+   "drain_s": 0.6,
+   "drained": true
+  },
+  {
+   "rate": 70,
+   "tag": 112319264,
+   "start": 1795429613.49689,
+   "end": 1795429704.264217,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 4198.909090909091,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 4198.909090909091,
+    "throughput_ratio": 1.0,
+    "place_p95_s": 0.004752469456719523,
+    "place_p99_s": 0.004952573433844554,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.49499999999999994,
+    "accepted_per_s": 69.98181818181818,
+    "completed_per_s": 69.98181818181818,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.015,
+     "inventory": 0.222,
+     "notification": 0.068,
+     "order": 0.323,
+     "payment": 0.123,
+     "pg-inventory": 0.254,
+     "pg-order": 0.371,
+     "pg-rest": 0.178,
+     "prometheus": 0.002,
+     "rabbitmq": 0.506
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "catalog": 0.002,
+     "order": 0.004
+    },
+    "host_busy_cores": 2.7192727272727177,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 6.0,
+    "outbox_age_max_s": 0.014733,
+    "saga_in_flight_max": 4.0,
+    "queued_max": 6.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "inventory": 0.004753705148205929,
+     "order": 0.004752880783226479,
+     "payment": 0.00475,
+     "notification": 0.00475
+    }
+   },
+   "k6": {
+    "http_reqs": 6300,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 416.6419811999993,
+    "p99_ms": null,
+    "vus_max": 70
+   },
+   "drain_s": 0.5,
+   "drained": true
+  },
+  {
+   "rate": 80,
+   "tag": 112319285,
+   "start": 1795429717.379068,
+   "end": 1795429807.834772,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 4800.0,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 4800.0,
+    "throughput_ratio": 1.0,
+    "place_p95_s": 0.0047510797908615595,
+    "place_p99_s": 0.004951125255739941,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 80.0,
+    "completed_per_s": 80.0,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.018,
+     "inventory": 0.253,
+     "notification": 0.078,
+     "order": 0.347,
+     "payment": 0.143,
+     "pg-inventory": 0.279,
+     "pg-order": 0.39,
+     "pg-rest": 0.199,
+     "prometheus": 0.002,
+     "rabbitmq": 0.564
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "order": 0.005
+    },
+    "host_busy_cores": 2.940363636363641,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 6.0,
+    "outbox_age_max_s": 0.008986,
+    "saga_in_flight_max": 4.0,
+    "queued_max": 9.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "inventory": 0.004751079177553106,
+     "order": 0.004752159745377387,
+     "payment": 0.00475,
+     "notification": 0.00475
+    }
+   },
+   "k6": {
+    "http_reqs": 7200,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 90.33852019999998,
+    "p99_ms": null,
+    "vus_max": 80
+   },
+   "drain_s": 0.5,
+   "drained": true
+  },
+  {
+   "rate": 100,
+   "tag": 112319306,
+   "start": 1795429821.3322775,
+   "end": 1795429911.8361557,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 0.9996363636363635,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 6000.0,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 5997.818181818181,
+    "throughput_ratio": 0.9996363636363635,
+    "place_p95_s": 0.004754322111010009,
+    "place_p99_s": 0.004954504094631483,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 100.0,
+    "completed_per_s": 99.96363636363635,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.022,
+     "inventory": 0.296,
+     "notification": 0.096,
+     "order": 0.394,
+     "payment": 0.174,
+     "pg-inventory": 0.342,
+     "pg-order": 0.459,
+     "pg-rest": 0.239,
+     "prometheus": 0.002,
+     "rabbitmq": 0.605
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "order": 0.004
+    },
+    "host_busy_cores": 3.312909090909075,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 7.0,
+    "outbox_age_max_s": 0.009363,
+    "saga_in_flight_max": 6.0,
+    "queued_max": 6.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "notification": 0.00475,
+     "inventory": 0.004757352941176471,
+     "order": 0.004751728425010614,
+     "payment": 0.004750863793416986
+    }
+   },
+   "k6": {
+    "http_reqs": 9001,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 88.641384,
+    "p99_ms": null,
+    "vus_max": 100
+   },
+   "drain_s": 0.5,
+   "drained": true
+  },
+  {
+   "rate": 120,
+   "tag": 112319327,
+   "start": 1795429925.3333938,
+   "end": 1795430016.1777833,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 1.000151538111835,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 7198.90909090909,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 7199.999999999999,
+    "throughput_ratio": 1.000151538111835,
+    "place_p95_s": 0.004755043992718446,
+    "place_p99_s": 0.004955256371359223,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 119.98181818181817,
+    "completed_per_s": 119.99999999999999,
+    "cpu": {
+     "catalog": 0.004,
+     "cgroups": 0.001,
+     "haproxy": 0.025,
+     "inventory": 0.339,
+     "notification": 0.112,
+     "order": 0.439,
+     "payment": 0.2,
+     "pg-inventory": 0.407,
+     "pg-order": 0.529,
+     "pg-rest": 0.279,
+     "prometheus": 0.002,
+     "rabbitmq": 0.68
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "catalog": 0.004,
+     "inventory": 0.005,
+     "order": 0.008
+    },
+    "host_busy_cores": 3.6481818181818113,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 12.0,
+    "outbox_age_max_s": 0.014457,
+    "saga_in_flight_max": 6.0,
+    "queued_max": 10.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "notification": 0.004749999999999999,
+     "inventory": 0.0047655240556357835,
+     "order": 0.004756245574997472,
+     "payment": 0.004750719915125796
+    }
+   },
+   "k6": {
+    "http_reqs": 10800,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 91.69124134999998,
+    "p99_ms": null,
+    "vus_max": 120
+   },
+   "drain_s": 0.5,
+   "drained": true
+  },
+  {
+   "rate": 140,
+   "tag": 112319338,
+   "start": 1795430029.7522795,
+   "end": 1795430120.3191066,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 1.0007794232268121,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 8397.818181818182,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 8404.363636363636,
+    "throughput_ratio": 1.0007794232268121,
+    "place_p95_s": 0.004786060209424084,
+    "place_p99_s": 0.004987578534031413,
+    "saga_p95_s": 0.47500000000000003,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 139.96363636363637,
+    "completed_per_s": 140.07272727272726,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.029,
+     "inventory": 0.374,
+     "notification": 0.126,
+     "order": 0.479,
+     "payment": 0.226,
+     "pg-inventory": 0.463,
+     "pg-order": 0.596,
+     "pg-rest": 0.33,
+     "prometheus": 0.002,
+     "rabbitmq": 0.733
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "inventory": 0.004,
+     "order": 0.046
+    },
+    "host_busy_cores": 3.9612727272727253,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 14.0,
+    "outbox_age_max_s": 0.045655,
+    "saga_in_flight_max": 8.0,
+    "queued_max": 9.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "notification": 0.004750000000000001,
+     "inventory": 0.004779479976481348,
+     "order": 0.004791870308954441,
+     "payment": 0.004752469135802469
+    }
+   },
+   "k6": {
+    "http_reqs": 12600,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 96.20008874999992,
+    "p99_ms": null,
+    "vus_max": 140
+   },
+   "drain_s": 0.5,
+   "drained": true
+  },
+  {
+   "rate": 160,
+   "tag": 112319359,
+   "start": 1795430134.2522995,
+   "end": 1795430224.680227,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 0.9998863636363635,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 9600.0,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 9598.90909090909,
+    "throughput_ratio": 0.9998863636363635,
+    "place_p95_s": 0.0049263406010606955,
+    "place_p99_s": 0.021968911917098523,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.49499999999999994,
+    "accepted_per_s": 160.0,
+    "completed_per_s": 159.98181818181817,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.032,
+     "inventory": 0.409,
+     "notification": 0.134,
+     "order": 0.499,
+     "payment": 0.242,
+     "pg-inventory": 0.526,
+     "pg-order": 0.669,
+     "pg-rest": 0.37,
+     "prometheus": 0.002,
+     "rabbitmq": 0.744
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "catalog": 0.003,
+     "inventory": 0.006,
+     "order": 0.284
+    },
+    "host_busy_cores": 4.147090909090911,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 25.0,
+    "outbox_age_max_s": 0.04171,
+    "saga_in_flight_max": 16.0,
+    "queued_max": 13.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "notification": 0.004751619870410367,
+     "inventory": 0.004817337059874373,
+     "order": 0.004943858438485805,
+     "payment": 0.004752700397953383
+    }
+   },
+   "k6": {
+    "http_reqs": 14401,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 107.159679,
+    "p99_ms": null,
+    "vus_max": 160
+   },
+   "drain_s": 0.6,
+   "drained": true
+  },
+  {
+   "rate": 200,
+   "tag": 112319370,
+   "start": 1795430238.0879138,
+   "end": 1795430328.7000132,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 1.00099981821487,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 12002.181818181818,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 12014.181818181818,
+    "throughput_ratio": 1.00099981821487,
+    "place_p95_s": 0.022926403641881643,
+    "place_p99_s": 0.08513243243243246,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 200.03636363636363,
+    "completed_per_s": 200.23636363636362,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.036,
+     "inventory": 0.431,
+     "notification": 0.118,
+     "order": 0.499,
+     "payment": 0.223,
+     "pg-inventory": 0.677,
+     "pg-order": 0.874,
+     "pg-rest": 0.417,
+     "prometheus": 0.002,
+     "rabbitmq": 0.667
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "catalog": 0.001,
+     "inventory": 0.009,
+     "order": 1.129
+    },
+    "host_busy_cores": 4.336727272727264,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 49.0,
+    "outbox_age_max_s": 0.073466,
+    "saga_in_flight_max": 43.0,
+    "queued_max": 37.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "inventory": 0.015072428484479622,
+     "order": 0.06934274043817301,
+     "payment": 0.005065377532228359,
+     "notification": 0.004847756558820802
+    }
+   },
+   "k6": {
+    "http_reqs": 18000,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 143.65145594999996,
+    "p99_ms": null,
+    "vus_max": 200
+   },
+   "drain_s": 0.4,
+   "drained": true
+  },
+  {
+   "rate": 240,
+   "tag": 112319391,
+   "start": 1795430342.003519,
+   "end": 1795430432.6502984,
+   "holds": false,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 0.8254840397697539,
+     "ok": false
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 0.8688338258695159,
+     "ok": false
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 14396.727272727272,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 0.8254840397697539,
+    "saga_completed": 12508.363636363636,
+    "throughput_ratio": 0.8688338258695159,
+    "place_p95_s": 0.09559627413652436,
+    "place_p99_s": 0.19108482142857156,
+    "saga_p95_s": 24.26986506746626,
+    "saga_p99_s": 28.853973013493256,
+    "accepted_per_s": 239.94545454545454,
+    "completed_per_s": 208.47272727272727,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.044,
+     "inventory": 0.462,
+     "notification": 0.112,
+     "order": 0.499,
+     "payment": 0.218,
+     "pg-inventory": 0.759,
+     "pg-order": 0.947,
+     "pg-rest": 0.432,
+     "prometheus": 0.002,
+     "rabbitmq": 0.689
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "inventory": 0.049,
+     "order": 1.714
+    },
+    "host_busy_cores": 4.573272727272739,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 67.0,
+    "outbox_age_max_s": 0.164476,
+    "saga_in_flight_max": 2598.0,
+    "queued_max": 2696.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "order": 0.09835769156440234,
+     "payment": 0.008851835664335663,
+     "notification": 0.007308128078817736,
+     "inventory": 0.02282124296232135
+    }
+   },
+   "k6": {
+    "http_reqs": 21600,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 189.40215644999998,
+    "p99_ms": null,
+    "vus_max": 240
+   },
+   "drain_s": 0.4,
+   "drained": true
+  },
+  {
+   "rate": 240,
+   "tag": 112319402,
+   "start": 1795430446.0446236,
+   "end": 1795430536.5852044,
+   "holds": false,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 0.8979396679127185,
+     "ok": false
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 0.8717696097006442,
+     "ok": false
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 14394.545454545454,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 0.8979396679127185,
+    "saga_completed": 12548.727272727272,
+    "throughput_ratio": 0.8717696097006442,
+    "place_p95_s": 0.09685213843556557,
+    "place_p99_s": 0.20460435779816505,
+    "saga_p95_s": 20.201873935264043,
+    "saga_p99_s": 28.040374787052805,
+    "accepted_per_s": 239.9090909090909,
+    "completed_per_s": 209.14545454545453,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.0,
+     "haproxy": 0.043,
+     "inventory": 0.462,
+     "notification": 0.112,
+     "order": 0.499,
+     "payment": 0.22,
+     "pg-inventory": 0.759,
+     "pg-order": 0.947,
+     "pg-rest": 0.434,
+     "prometheus": 0.002,
+     "rabbitmq": 0.701
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "inventory": 0.042,
+     "order": 1.724
+    },
+    "host_busy_cores": 4.583454545454548,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 64.0,
+    "outbox_age_max_s": 0.102116,
+    "saga_in_flight_max": 2366.0,
+    "queued_max": 2371.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "notification": 0.0070545310853529965,
+     "inventory": 0.02258183805790108,
+     "order": 0.09869708327326893,
+     "payment": 0.008871132943143813
+    }
+   },
+   "k6": {
+    "http_reqs": 21601,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 190.759125,
+    "p99_ms": null,
+    "vus_max": 240
+   },
+   "drain_s": 0.4,
+   "drained": true
+  },
+  {
+   "rate": 200,
+   "tag": 112319423,
+   "start": 1795430550.812557,
+   "end": 1795430641.3786893,
+   "holds": true,
+   "rows": [
+    {
+     "row": "server errors < 0.5%",
+     "value": 0.0,
+     "ok": true
+    },
+    {
+     "row": "placement <= 0.5s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga final <= 10s >= 99%",
+     "value": 1.0,
+     "ok": true
+    },
+    {
+     "row": "saga throughput >= 97%",
+     "value": 0.9995455784785967,
+     "ok": true
+    },
+    {
+     "row": "client not accepted < 0.5%",
+     "value": 0,
+     "ok": true
+    },
+    {
+     "row": "k6 dropped < 1%",
+     "value": 0.0,
+     "ok": true
+    }
+   ],
+   "metrics": {
+    "placed": 12003.272727272726,
+    "server_errors": 0,
+    "server_err_ratio": 0.0,
+    "latency_ok_ratio": 1.0,
+    "saga_ok_ratio": 1.0,
+    "saga_completed": 11997.81818181818,
+    "throughput_ratio": 0.9995455784785967,
+    "place_p95_s": 0.02380784469096669,
+    "place_p99_s": 0.08677524038461534,
+    "saga_p95_s": 0.475,
+    "saga_p99_s": 0.495,
+    "accepted_per_s": 200.05454545454543,
+    "completed_per_s": 199.96363636363634,
+    "cpu": {
+     "catalog": 0.003,
+     "cgroups": 0.001,
+     "haproxy": 0.036,
+     "inventory": 0.433,
+     "notification": 0.117,
+     "order": 0.498,
+     "payment": 0.222,
+     "pg-inventory": 0.663,
+     "pg-order": 0.841,
+     "pg-rest": 0.411,
+     "prometheus": 0.002,
+     "rabbitmq": 0.666
+    },
+    "cpu_limit": {
+     "catalog": 0.25,
+     "cgroups": 0.25,
+     "haproxy": 1.0,
+     "inventory": 0.5,
+     "notification": 0.5,
+     "order": 0.5,
+     "payment": 1.0,
+     "pg-inventory": 2.0,
+     "pg-order": 2.0,
+     "pg-rest": 1.5,
+     "prometheus": 1.0,
+     "rabbitmq": 2.5
+    },
+    "replicas": {
+     "catalog": 1,
+     "cgroups": 1,
+     "haproxy": 1,
+     "inventory": 1,
+     "notification": 1,
+     "order": 1,
+     "payment": 1,
+     "pg-inventory": 1,
+     "pg-order": 1,
+     "pg-rest": 1,
+     "prometheus": 1,
+     "rabbitmq": 1
+    },
+    "throttled": {
+     "catalog": 0.003,
+     "inventory": 0.01,
+     "order": 1.129
+    },
+    "host_busy_cores": 4.315818181818163,
+    "host_cpus": 12.0,
+    "outbox_pending_max": 46.0,
+    "outbox_age_max_s": 0.071083,
+    "saga_in_flight_max": 49.0,
+    "queued_max": 39.0,
+    "dlq": 0.0,
+    "handler_p95_s": {
+     "payment": 0.006054869186046507,
+     "notification": 0.004845572554473806,
+     "inventory": 0.01545555227406972,
+     "order": 0.07036471433704636
+    }
+   },
+   "k6": {
+    "http_reqs": 18001,
+    "http_failed_rate": 0,
+    "dropped_iterations": null,
+    "p95_ms": 141.239141,
+    "p99_ms": null,
+    "vus_max": 200
+   },
+   "drain_s": 0.4,
+   "drained": true
+  }
+ ],
+ "first_fail": 240,
+ "knee": 200,
+ "unstable": []
+}
