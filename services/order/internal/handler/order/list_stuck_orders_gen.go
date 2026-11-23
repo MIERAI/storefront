@@ -7,9 +7,9 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/MIERAI/api-factory-runtime/apierr"
-	"github.com/MIERAI/api-factory-runtime/clock"
-	"github.com/MIERAI/api-factory-runtime/conv"
+	"github.com/MIERAI/api-factory/runtime/apierr"
+	"github.com/MIERAI/api-factory/runtime/clock"
+	"github.com/MIERAI/api-factory/runtime/conv"
 	"github.com/MIERAI/storefront/services/order/gen/db"
 	orderv1 "github.com/MIERAI/storefront/services/order/gen/order/order/v1"
 )

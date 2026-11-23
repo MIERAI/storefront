@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/MIERAI/api-factory-runtime/server"
+	"github.com/MIERAI/api-factory/runtime/server"
 
 	"github.com/MIERAI/storefront/services/payment/internal/migrations"
 )

@@ -5,10 +5,10 @@
 package catalog
 
 import (
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/paging"
-	"github.com/MIERAI/api-factory-runtime/shard"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/paging"
+	"github.com/MIERAI/api-factory/runtime/shard"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/catalog/gen/catalog/catalog/v1/catalogv1connect"
 	"github.com/MIERAI/storefront/services/catalog/gen/db"
 )

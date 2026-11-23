@@ -7,8 +7,8 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/MIERAI/api-factory-runtime/apierr"
-	"github.com/MIERAI/api-factory-runtime/conv"
+	"github.com/MIERAI/api-factory/runtime/apierr"
+	"github.com/MIERAI/api-factory/runtime/conv"
 	"github.com/MIERAI/storefront/services/notification/gen/db"
 	notificationv1 "github.com/MIERAI/storefront/services/notification/gen/notification/notification/v1"
 )

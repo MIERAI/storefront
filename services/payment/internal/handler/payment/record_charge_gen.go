@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/MIERAI/api-factory-runtime/conv"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/conv"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	paymentv1 "github.com/MIERAI/storefront/services/payment/gen/payment/payment/v1"
 )
 

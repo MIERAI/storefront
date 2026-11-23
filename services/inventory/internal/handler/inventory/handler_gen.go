@@ -5,10 +5,10 @@
 package inventory
 
 import (
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/paging"
-	"github.com/MIERAI/api-factory-runtime/shard"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/paging"
+	"github.com/MIERAI/api-factory/runtime/shard"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/inventory/gen/db"
 	"github.com/MIERAI/storefront/services/inventory/gen/inventory/inventory/v1/inventoryv1connect"
 )

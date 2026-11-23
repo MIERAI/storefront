@@ -5,10 +5,10 @@
 package order
 
 import (
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/paging"
-	"github.com/MIERAI/api-factory-runtime/shard"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/paging"
+	"github.com/MIERAI/api-factory/runtime/shard"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/order/gen/db"
 	"github.com/MIERAI/storefront/services/order/gen/order/order/v1/orderv1connect"
 )

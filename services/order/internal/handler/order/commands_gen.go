@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/txn"
 )
 
 // writeError: 写操作失败的原因(运行时 txn 的分类)→ 错误码(命令工厂设计稿 §3.2 / §3.3)。

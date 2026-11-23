@@ -3,7 +3,7 @@
 package inventory
 
 import (
-	"github.com/MIERAI/api-factory-runtime/anomaly"
+	"github.com/MIERAI/api-factory/runtime/anomaly"
 	inventoryv1 "github.com/MIERAI/storefront/services/inventory/gen/inventory/inventory/v1"
 )
 

@@ -3,7 +3,7 @@
 package notification
 
 import (
-	"github.com/MIERAI/api-factory-runtime/anomaly"
+	"github.com/MIERAI/api-factory/runtime/anomaly"
 	notificationv1 "github.com/MIERAI/storefront/services/notification/gen/notification/notification/v1"
 )
 

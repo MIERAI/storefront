@@ -78,7 +78,9 @@ curl -sG localhost:3200/api/search --data-urlencode 'q={ resource.service.name =
 `services/catalog` is its own Go module and a project of [api-factory](https://github.com/MIERAI/api-factory): the
 designs (`design/catalog/*.yaml`) and the table (`db/schema/*.sql`) are written by hand; the specs, proto, queries,
 handlers, wiring, Dockerfile and the environment table of its README are generated. The factory is a tool pinned to
-one commit (`scripts/factory.sh`, `FACTORY_SHA`). Hand-written: `cmd/server/main.go` (adds `migrate`) and
+one release (`scripts/factory.sh`, `FACTORY_VERSION` + its commit `FACTORY_SHA`); the services import the runtime paired
+with it (`github.com/MIERAI/api-factory/runtime`, same version; `scripts/factory.sh services/<name> upgrade` after
+moving the pin). Hand-written: `cmd/server/main.go` (adds `migrate`) and
 `internal/migrations` (goose; the factory has no migrations yet). Messages: `contracts/` (the v2 system's contracts,
 shared by the services).
 

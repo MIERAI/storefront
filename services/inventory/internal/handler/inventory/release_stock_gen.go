@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/MIERAI/api-factory-runtime/clock"
-	"github.com/MIERAI/api-factory-runtime/consume"
-	"github.com/MIERAI/api-factory-runtime/message"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/clock"
+	"github.com/MIERAI/api-factory/runtime/consume"
+	"github.com/MIERAI/api-factory/runtime/message"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	inventoryv1 "github.com/MIERAI/storefront/services/inventory/gen/inventory/inventory/v1"
 	"github.com/jackc/pgx/v5"
 )

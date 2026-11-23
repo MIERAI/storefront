@@ -5,10 +5,10 @@
 package notification
 
 import (
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/paging"
-	"github.com/MIERAI/api-factory-runtime/shard"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/paging"
+	"github.com/MIERAI/api-factory/runtime/shard"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/notification/gen/db"
 	"github.com/MIERAI/storefront/services/notification/gen/notification/notification/v1/notificationv1connect"
 )

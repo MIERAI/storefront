@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MIERAI/api-factory-runtime/anomaly"
+	"github.com/MIERAI/api-factory/runtime/anomaly"
 	orderv1 "github.com/MIERAI/storefront/services/order/gen/order/order/v1"
 )
 
