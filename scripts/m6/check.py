@@ -355,7 +355,7 @@ def cmd_deploy(a):
             m6.row("no other pod replaced", "same pod uids outside the target", f"{len(replaced)}", not replaced, few(replaced)),
             m6.row("no other container restarted", "same restart count, start time and image digest", f"{len(restarted)}", not restarted, few(restarted, 3))]
     w = max(int(end - start), 60)
-    num = m6.prom_scalar(f'sum(increase(factory_sm_completion_seconds_bucket{{namespace="{a.namespace}", {JOURNEY}, le="60"}}[{w}s]))', end)
+    num = m6.prom_scalar(f'sum(increase(factory_sm_completion_seconds_bucket{{namespace="{a.namespace}", {JOURNEY}, le=~"60|60[.]0"}}[{w}s]))', end)
     den = m6.prom_scalar(f'sum(increase(factory_sm_completion_seconds_count{{namespace="{a.namespace}", {JOURNEY}}}[{w}s]))', end)
     j = (num or 0) / den if den else None
     rows.append(m6.row("journey SLO unaffected", "≥ 99% of orders final within 60s during the window", f"{m6.fmt_pct(j)} of {den and int(den)}", None if j is None else j >= 0.99))
@@ -375,9 +375,11 @@ def cmd_deploy(a):
         for k, label in (("m6_browse_ok", "browse"), ("m6_order_ok", "orders")):
             v = (s.get("metrics", {}).get(k) or {}).get("rate")
             rows.append(m6.row(f"users: {label}", "≥ 99.5% succeeded (k6, the whole load run)", m6.fmt_pct(v, 3), None if v is None else v >= 0.995))
-    pages = m6.prom(f'max_over_time(ALERTS{{namespace="{a.namespace}", alertstate="firing", severity="page"}}[{w}s])', end)
-    rows.append(m6.row("no page", "no page-severity alert fired in the namespace during the window",
-                       f"{len(pages)}", not pages, few(p[0].get("slo") or p[0].get("alertname") for p in pages)))
+    sel = f'ALERTS{{namespace="{a.namespace}", alertstate="firing", severity="page"}}'
+    already = {p[0].get("slo") or p[0].get("alertname") for p in m6.prom(sel, start)}
+    pages = {p[0].get("slo") or p[0].get("alertname") for p in m6.prom(f'max_over_time({sel}[{w}s])', end)} - already
+    rows.append(m6.row("no new page", "no page-severity alert started firing in the namespace during the window",
+                       f"{len(pages)}", not pages, few(sorted(pages)) + (f" (already firing before, not counted: {few(sorted(already))})" if already else "")))
     return m6.write_result(a.out, f"Independent deploy (release {a.target})", rows,
                            {"window": [start, end], "changed": others, "replaced": replaced, "restarted": restarted})
 
