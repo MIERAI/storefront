@@ -15,7 +15,8 @@ A step holds when all three hold over the step:
 The last one is what makes this a flash-sale test rather than a PlaceOrder test: placing an order only writes order's
 database (design §6.3); the contention is in inventory's conditional UPDATE on three rows. 10s (a bucket edge of
 factory_sm_completion_seconds) is "keeps up": a normal order completes in about a second, so a backlog that grows
-crosses it within one step, long before the 60s journey SLO. Reported workloads: order first (per pod), then
+crosses it within one step, long before the 60s journey SLO. "10.0", not "10": Prometheus 3 stores integer bucket edges
+as le="10.0", and capacity.py matches the threshold literally. Reported workloads: order first (per pod), then
 inventory, payment, notification, Postgres and RabbitMQ (their CPU tells which ran out).
 """
 import argparse
@@ -42,7 +43,7 @@ def render(ns, order_port, pg, rabbit):
             {"name": "placement-latency", "objective": 99,
              "latency": {"metric": "rpc_request_duration_seconds", "matchers": f'procedure="{PLACE}"', "threshold": "0.5"}},
             {"name": "saga-keeps-up", "objective": 99,
-             "latency": {"metric": "factory_sm_completion_seconds", "matchers": 'machine="OrderSaga"', "threshold": "10"}},
+             "latency": {"metric": "factory_sm_completion_seconds", "matchers": 'machine="OrderSaga"', "threshold": "10.0"}},
         ],
         "capacity": {
             "slos": ["placement-availability", "placement-latency", "saga-keeps-up"],
