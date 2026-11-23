@@ -1,0 +1,218 @@
+[
+  {
+    "id": "catalog.create-product",
+    "method": "CreateProduct",
+    "summary": "新建一个商品,返回新建的商品(状态 = 在售,版本号 = 1),同时发出 catalog.product_created",
+    "path": "/catalog.catalog.v1.CatalogService/CreateProduct",
+    "pattern": "command",
+    "cases": [
+      {
+        "name": "新的 SKU → 新建,在售,版本号 1",
+        "request": {
+          "category": "goods",
+          "name": "马克杯",
+          "price": "1600.50",
+          "sku": "MUG-004"
+        },
+        "response": {
+          "category": "goods",
+          "name": "马克杯",
+          "price": "1600.50",
+          "sku": "MUG-004",
+          "status": "PRODUCT_STATUS_ON_SALE",
+          "updated_at": "2026-11-22T01:00:00Z",
+          "version": 1
+        }
+      },
+      {
+        "name": "价格 0 可以(赠品)",
+        "request": {
+          "category": "goods",
+          "name": "赠品",
+          "price": "0",
+          "sku": "GIFT-01"
+        },
+        "response": {
+          "price": "0",
+          "sku": "GIFT-01",
+          "status": "PRODUCT_STATUS_ON_SALE",
+          "version": 1
+        }
+      }
+    ]
+  },
+  {
+    "id": "catalog.discontinue-product",
+    "method": "DiscontinueProduct",
+    "summary": "下架一个商品(状态 → 已下架)。请求带读到的版本号,版本号不一致(别人先改过)时不改",
+    "path": "/catalog.catalog.v1.CatalogService/DiscontinueProduct",
+    "pattern": "update",
+    "cases": [
+      {
+        "name": "在售的商品 → 已下架,版本号加 1(行还在)",
+        "request": {
+          "sku": "BEAN-001",
+          "version": 3
+        },
+        "response": {
+          "sku": "BEAN-001",
+          "status": "PRODUCT_STATUS_DISCONTINUED",
+          "updated_at": "2026-11-22T01:00:00Z",
+          "version": 4
+        }
+      },
+      {
+        "name": "已经下架的商品再下架 → 成功(重复下架不是错误)",
+        "request": {
+          "sku": "OLD-003",
+          "version": 2
+        },
+        "response": {
+          "status": "PRODUCT_STATUS_DISCONTINUED",
+          "version": 3
+        }
+      }
+    ]
+  },
+  {
+    "id": "catalog.get-product",
+    "method": "GetProduct",
+    "summary": "按 SKU 返回商品详情,包括状态(下架的商品也返回)",
+    "path": "/catalog.catalog.v1.CatalogService/GetProduct",
+    "pattern": "get_by_id",
+    "cases": [
+      {
+        "name": "在售的商品",
+        "request": {
+          "sku": "BEAN-001"
+        },
+        "response": {
+          "category": "coffee",
+          "found": true,
+          "name": "咖啡豆",
+          "price": "1200.5",
+          "status": "PRODUCT_STATUS_ON_SALE",
+          "updated_at": "2026-11-01T00:00:00Z",
+          "version": 2
+        }
+      },
+      {
+        "name": "下架的商品也返回(带状态)",
+        "request": {
+          "sku": "OLD-003"
+        },
+        "response": {
+          "found": true,
+          "status": "PRODUCT_STATUS_DISCONTINUED"
+        }
+      },
+      {
+        "name": "不存在的 SKU 不是错误",
+        "request": {
+          "sku": "NONE-999"
+        },
+        "response": {
+          "found": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "catalog.list-products",
+    "method": "ListProducts",
+    "summary": "返回某个分类下在售的商品,按 SKU 排序,分页",
+    "path": "/catalog.catalog.v1.CatalogService/ListProducts",
+    "pattern": "list_keyset",
+    "cases": [
+      {
+        "name": "分类内在售的商品,按 SKU 排序(下架的不显示)",
+        "request": {
+          "category": "coffee"
+        },
+        "response": {
+          "products": [
+            {
+              "sku": "BAG-002"
+            },
+            {
+              "sku": "BEAN-001"
+            }
+          ]
+        }
+      },
+      {
+        "name": "其他分类",
+        "request": {
+          "category": "goods"
+        },
+        "response": {
+          "products": [
+            {
+              "name": "马克杯",
+              "price": "1600",
+              "sku": "MUG-004",
+              "version": 1
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "catalog.reactivate-product",
+    "method": "ReactivateProduct",
+    "summary": "把一个已下架的商品重新上架(状态 → 在售)。只有已下架的商品才能上架;请求带读到的版本号,版本号不一致时不改",
+    "path": "/catalog.catalog.v1.CatalogService/ReactivateProduct",
+    "pattern": "command",
+    "cases": [
+      {
+        "name": "已下架、版本号一致 → 上架,版本号加 1",
+        "request": {
+          "sku": "OLD-003",
+          "version": 2
+        },
+        "response": {
+          "sku": "OLD-003",
+          "status": "PRODUCT_STATUS_ON_SALE",
+          "updated_at": "2026-11-22T01:00:00Z",
+          "version": 3
+        }
+      }
+    ]
+  },
+  {
+    "id": "catalog.update-price",
+    "method": "UpdatePrice",
+    "summary": "调整一个商品的售价。请求带读到的版本号,版本号不一致(别人先改过)时不改",
+    "path": "/catalog.catalog.v1.CatalogService/UpdatePrice",
+    "pattern": "update",
+    "cases": [
+      {
+        "name": "版本号一致 → 改价格,版本号加 1",
+        "request": {
+          "price": "1300",
+          "sku": "BEAN-001",
+          "version": 3
+        },
+        "response": {
+          "price": "1300",
+          "sku": "BEAN-001",
+          "updated_at": "2026-11-22T01:00:00Z",
+          "version": 4
+        }
+      },
+      {
+        "name": "小数的价格保持写法",
+        "request": {
+          "price": "180.50",
+          "sku": "BAG-002",
+          "version": 1
+        },
+        "response": {
+          "price": "180.50",
+          "version": 2
+        }
+      }
+    ]
+  }
+]

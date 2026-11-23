@@ -1,0 +1,78 @@
+# ============================================================================
+# CreateProduct: 新建商品(W1,组合命令: 新建 + 发出 catalog.product_created)
+# ============================================================================
+API: CreateProduct
+说明: 新建一个商品,返回新建的商品(状态 = 在售,版本号 = 1),同时发出 catalog.product_created
+背景: 商品管理画面登记新商品。SKU 由运营决定(印在包装上),重复登记要报错,不能覆盖已有的商品。inventory 收到事件后为这个 SKU
+  建一条库存为 0 的记录(InitStock),之后才能入库
+负责人: storefront
+风险: 中
+
+种类: 组合命令
+
+输入:
+  sku:      { 类型: 文本,       必填: 是, 长度: 3~32,  格式: 代码, 说明: SKU(大写英文字母、数字和 -) }
+  name:     { 类型: 文本,       必填: 是, 长度: 1~200, 说明: 商品名 }
+  category: { 类型: 文本,       必填: 是, 长度: 1~50,  说明: 分类 }
+  price:    { 类型: 非负十进制, 必填: 是, 说明: 售价 }
+
+操作:
+  - 商品:
+      新建: products
+      值: { sku: 输入.sku, name: 输入.name, category: 输入.category, price: 输入.price, status: ON_SALE, version: 1, updated_at: 现在 }
+
+发出:
+  - catalog.product_created: { sku: 商品.sku }
+
+输出:                             # 新建的行
+  sku:        { 说明: SKU, 来自: 商品.sku }
+  name:       { 说明: 商品名, 来自: 商品.name }
+  category:   { 说明: 分类, 来自: 商品.category }
+  price:      { 说明: 售价, 来自: 商品.price }
+  status:     { 说明: 状态(新建 = 在售), 来自: 商品.status }
+  version:    { 说明: 版本号(新建 = 1), 来自: 商品.version }
+  updated_at: { 说明: 最后更新时间(= 请求的时刻), 来自: 商品.updated_at }
+
+业务规则:
+  - 情况: 新的 SKU
+    结果: 新建(在售,版本号 1),发出 catalog.product_created(SKU)
+  - 情况: 同一个 SKU 已经有了(包括已下架的商品)
+    结果: 已存在(ALREADY_EXISTS),什么都不写、不发出
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    products:
+      - { sku: "BEAN-001", name: 咖啡豆, category: coffee, price: 1200, status: ON_SALE, version: 2, updated_at: "2026-11-01 09:00" }
+      - { sku: "OLD-003", name: 旧咖啡豆, category: coffee, price: 900, status: DISCONTINUED, version: 4, updated_at: "2026-10-01 09:00" }
+  用例:
+    - 说明: 新的 SKU → 新建,在售,版本号 1
+      输入: { sku: "MUG-004", name: 马克杯, category: goods, price: "1600.50" }
+      结果: { sku: "MUG-004", name: 马克杯, category: goods, price: "1600.50", status: ON_SALE, version: 1, updated_at: "2026-11-22 10:00" }
+      发出:
+        - catalog.product_created: { sku: "MUG-004" }
+      之后:
+        products:
+          - { sku: "BEAN-001", price: 1200, version: 2 }
+          - { sku: "OLD-003", status: DISCONTINUED, version: 4 }
+          - { sku: "MUG-004", name: 马克杯, category: goods, price: 1600.5, status: ON_SALE, version: 1, updated_at: "2026-11-22 10:00" }
+    - 说明: 已有的 SKU → 已存在,已有的商品不变
+      输入: { sku: "BEAN-001", name: 新咖啡豆, category: coffee, price: "1500" }
+      错误: 已存在
+      发出: []
+      之后: 不变
+    - 说明: 已下架的商品的 SKU 也不能再用
+      输入: { sku: "OLD-003", name: 旧咖啡豆, category: coffee, price: "900" }
+      错误: 已存在
+      发出: []
+      之后: 不变
+    - 说明: 价格 0 可以(赠品)
+      输入: { sku: "GIFT-01", name: 赠品, category: goods, price: "0" }
+      结果: { sku: "GIFT-01", price: "0", status: ON_SALE, version: 1 }
+      发出:
+        - catalog.product_created: { sku: "GIFT-01" }
+      之后:
+        products:
+          - { sku: "BEAN-001" }
+          - { sku: "OLD-003" }
+          - { sku: "GIFT-01", price: 0, status: ON_SALE, version: 1 }

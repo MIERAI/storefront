@@ -1,0 +1,42 @@
+# catalog (storefront v2, step S1): test → image (signed) → dev (gitops-manifests catalog/overlays/dev). Its own
+# application in gitops-manifests (catalog/app.yaml: namespaces catalog-<env>, its own database). Only changes under
+# services/catalog (its own Go module) or contracts/ release it.
+name: release-catalog
+on:
+  push:
+    branches: [main]
+    paths: ["services/catalog/**", "contracts/**", "scripts/factory.sh", "scripts/migrations-check.sh", ".github/workflows/release-catalog.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run: { shell: bash }   # explicit bash = -eo pipefail
+concurrency: { group: release-catalog, cancel-in-progress: false }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with: { go-version-file: services/catalog/go.mod, cache-dependency-path: services/catalog/go.sum }
+      - uses: bufbuild/buf-action@v1   # the factory's toolchain (api-factory .github/actions/setup)
+        with: { version: 1.75.0, setup_only: true }
+      - uses: sqlc-dev/setup-sqlc@v4
+        with: { sqlc-version: 1.31.1 }
+      - run: go vet ./... && go test -race ./...
+        working-directory: services/catalog
+      - name: generated files match the designs (api-factory at the pinned commit)
+        run: scripts/factory.sh services/catalog verify
+  image:
+    needs: test
+    permissions: { contents: read, packages: write, id-token: write }
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/build-image.yml@main
+    with: { image: storefront-catalog, context: services/catalog, dockerfile: services/catalog/Dockerfile, sign: true }
+  promote:
+    needs: image
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
+    with:
+      app: catalog   # gitops-manifests catalog/app.yaml says which file holds this image
+      images: ${{ needs.image.outputs.name }}=${{ needs.image.outputs.tag }}   # ghcr.io/<this repository's owner>/storefront-catalog
+    secrets:
+      MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}

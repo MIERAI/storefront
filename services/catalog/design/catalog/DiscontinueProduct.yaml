@@ -1,0 +1,63 @@
+# ============================================================================
+# DiscontinueProduct: 下架商品(W3,命令: 按键更新,乐观锁)
+# ============================================================================
+API: DiscontinueProduct
+说明: 下架一个商品(状态 → 已下架)。请求带读到的版本号,版本号不一致(别人先改过)时不改
+背景: 商品停止销售。下架是逻辑删除(行留着,订单历史还要看商品名);ListProducts 不再显示,GetProduct 照样返回
+负责人: storefront
+风险: 中
+
+种类: 按键更新
+数据来源: products
+
+输入:
+  sku:     { 类型: 文本,   必填: 是, 长度: 3~32, 格式: 代码, 说明: SKU, 键: sku }
+  version: { 类型: 整数32, 必填: 是, 范围: "> 0", 说明: 读到的版本号, 乐观锁: version }
+
+设置:
+  status:     DISCONTINUED
+  updated_at: 现在
+
+输出:                             # 更新之后的行
+  sku:        SKU
+  status:     状态(= 已下架)
+  version:    版本号(更新之后 = 请求的版本号 + 1)
+  updated_at: 最后更新时间(= 请求的时刻)
+
+找不到时: "product not found: {sku}"
+
+业务规则:
+  - 情况: 版本号和现在的不一致
+    结果: 版本冲突(ABORTED),什么都不写
+  - 情况: 已经下架的商品(版本号一致)
+    结果: 成功(状态还是已下架,版本号加 1、更新时间 = 请求的时刻)。重复下架不是错误
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    products:
+      - { sku: "BEAN-001", name: 咖啡豆, category: coffee, price: 1200, status: ON_SALE, version: 3, updated_at: "2026-11-01 09:00" }
+      - { sku: "OLD-003", name: 旧咖啡豆, category: coffee, price: 900, status: DISCONTINUED, version: 2, updated_at: "2026-10-01 09:00" }
+  用例:
+    - 说明: 在售的商品 → 已下架,版本号加 1(行还在)
+      输入: { sku: "BEAN-001", version: 3 }
+      结果: { sku: "BEAN-001", status: DISCONTINUED, version: 4, updated_at: "2026-11-22 10:00" }
+      之后:
+        products:
+          - { sku: "BEAN-001", name: 咖啡豆, price: 1200, status: DISCONTINUED, version: 4, updated_at: "2026-11-22 10:00" }
+          - { sku: "OLD-003", status: DISCONTINUED, version: 2 }
+    - 说明: 已经下架的商品再下架 → 成功(重复下架不是错误)
+      输入: { sku: "OLD-003", version: 2 }
+      结果: { status: DISCONTINUED, version: 3 }
+      之后:
+        products:
+          - { sku: "BEAN-001", status: ON_SALE, version: 3 }
+          - { sku: "OLD-003", status: DISCONTINUED, version: 3, updated_at: "2026-11-22 10:00" }
+    - 说明: 版本号是旧的 → 版本冲突,什么都不写
+      输入: { sku: "BEAN-001", version: 1 }
+      错误: 版本冲突
+      之后: 不变
+    - 说明: 不存在的商品 → 找不到
+      输入: { sku: "NONE-999", version: 1 }
+      错误: 找不到
+      之后: 不变

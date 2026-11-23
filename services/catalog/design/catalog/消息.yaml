@@ -1,0 +1,9 @@
+# catalog 拥有的消息契约: 商品登记的事件(catalog 发出;inventory 收到后建库存记录)
+消息:
+  catalog.product_created:
+    种类: 事件
+    版本: 1
+    主体: sku
+    说明: 新商品登记好了(CreateProduct)
+    字段:
+      sku: { 类型: 文本, 必填: 是, 长度: 3~32, 格式: 代码, 说明: SKU }

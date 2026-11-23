@@ -1,0 +1,65 @@
+# ============================================================================
+# ReactivateProduct: 重新上架商品(命令: 组合命令,一个条件更新 + 乐观锁)
+# ============================================================================
+API: ReactivateProduct
+说明: 把一个已下架的商品重新上架(状态 → 在售)。只有已下架的商品才能上架;请求带读到的版本号,版本号不一致时不改
+背景: 季节商品下架之后再上架。在售的商品"重新上架"说明画面上的信息是旧的(别人已经上架了),应该告诉调用方而不是悄悄成功;两个人同时操作时后保存的不能覆盖先保存的(乐观锁)
+负责人: storefront
+风险: 中
+
+种类: 组合命令
+
+输入:
+  sku:     { 类型: 文本,   必填: 是, 长度: 3~32, 格式: 代码, 说明: SKU }
+  version: { 类型: 整数32, 必填: 是, 范围: "> 0", 说明: 读到的版本号 }
+
+操作:
+  - 上架:
+      更新: products
+      键: { sku: 输入.sku }
+      乐观锁: { version: 输入.version }
+      设置: { status: ON_SALE, updated_at: 现在 }
+      条件: "status = DISCONTINUED"
+      不满足: NOT_DISCONTINUED
+      找不到时: "product not found: {sku}"
+
+输出:                             # 更新之后的行
+  sku:        { 说明: SKU, 来自: 上架.sku }
+  status:     { 说明: 状态(= 在售), 来自: 上架.status }
+  version:    { 说明: 版本号(更新之后 = 请求的版本号 + 1), 来自: 上架.version }
+  updated_at: { 说明: 最后更新时间(= 请求的时刻), 来自: 上架.updated_at }
+
+业务规则:
+  - 情况: 商品在售(没有下架)
+    结果: 不是已下架(FAILED_PRECONDITION,原因码 NOT_DISCONTINUED),什么都不写
+  - 情况: 版本号和现在的不一致
+    结果: 版本冲突(ABORTED),什么都不写。版本冲突先于状态的判断(版本号是旧的 = 读到的状态也可能是旧的,调用方先重读)
+  - 情况: 不存在的商品
+    结果: 找不到(NOT_FOUND)
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    products:
+      - { sku: "OLD-003", name: 旧咖啡豆, category: coffee, price: 900, status: DISCONTINUED, version: 2, updated_at: "2026-10-01 09:00" }
+      - { sku: "BEAN-001", name: 咖啡豆, category: coffee, price: 1200, status: ON_SALE, version: 3, updated_at: "2026-11-01 09:00" }
+  用例:
+    - 说明: 已下架、版本号一致 → 上架,版本号加 1
+      输入: { sku: "OLD-003", version: 2 }
+      结果: { sku: "OLD-003", status: ON_SALE, version: 3, updated_at: "2026-11-22 10:00" }
+      之后:
+        products:
+          - { sku: "OLD-003", status: ON_SALE, version: 3, updated_at: "2026-11-22 10:00" }
+          - { sku: "BEAN-001", status: ON_SALE, version: 3, updated_at: "2026-11-01 09:00" }
+    - 说明: 在售的商品 → 不是已下架,什么都不写
+      输入: { sku: "BEAN-001", version: 3 }
+      错误: NOT_DISCONTINUED
+      之后: 不变
+    - 说明: 版本号是旧的 → 版本冲突(先于状态的判断)
+      输入: { sku: "BEAN-001", version: 2 }
+      错误: 版本冲突
+      之后: 不变
+    - 说明: 不存在的商品 → 找不到
+      输入: { sku: "NONE-999", version: 1 }
+      错误: 找不到
+      之后: 不变
