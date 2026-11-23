@@ -9,6 +9,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+defaults:
+  run: { shell: bash }   # explicit bash = -eo pipefail
 concurrency: { group: release-catalog, cancel-in-progress: false }
 jobs:
   test:
@@ -17,6 +19,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with: { go-version-file: services/catalog/go.mod, cache-dependency-path: services/catalog/go.sum }
+      - uses: bufbuild/buf-action@v1   # the factory's toolchain (api-factory .github/actions/setup)
+        with: { version: 1.75.0, setup_only: true }
+      - uses: sqlc-dev/setup-sqlc@v4
+        with: { sqlc-version: 1.31.1 }
       - run: go vet ./... && go test -race ./...
         working-directory: services/catalog
       - name: generated files match the designs (api-factory at the pinned commit)

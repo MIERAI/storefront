@@ -2,6 +2,8 @@ name: ci
 on: [pull_request]
 permissions:
   contents: read
+defaults:
+  run: { shell: bash }   # explicit bash = -eo pipefail (the implicit default is bash -e: a failing `x | tail` passes)
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -24,9 +26,9 @@ jobs:
   catalog:
     runs-on: ubuntu-latest
     services:
-      postgres:   # the factory's acceptance: an empty scratch database
+      postgres:   # the factory's acceptance: an empty scratch database (ICU collation, as the factory's own CI)
         image: mirror.gcr.io/library/postgres:16-alpine
-        env: { POSTGRES_PASSWORD: test }
+        env: { POSTGRES_PASSWORD: test, POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US" }
         ports: ["5432:5432"]
         options: --health-cmd pg_isready --health-interval 2s --health-timeout 5s --health-retries 15
     steps:
@@ -34,6 +36,10 @@ jobs:
         with: { fetch-depth: 0 }   # migrations-check compares with the base branch (append-only)
       - uses: actions/setup-go@v7
         with: { go-version-file: services/catalog/go.mod, cache-dependency-path: services/catalog/go.sum }
+      - uses: bufbuild/buf-action@v1   # the factory's toolchain (api-factory .github/actions/setup)
+        with: { version: 1.75.0, setup_only: true }
+      - uses: sqlc-dev/setup-sqlc@v4
+        with: { sqlc-version: 1.31.1 }
       - name: gofmt, vet, unit tests
         working-directory: services/catalog
         run: |
