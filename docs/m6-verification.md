@@ -140,9 +140,10 @@ Finally `./expose.py down`.
 |---|---|---|
 | Independent deploy | **PASS** (run 2) | payment `ef9c9b8 → 43542ad` through release-payment + promote; 0 other workloads changed, 0 pods replaced, 0 restarts; journey 100% of 453 orders final ≤ 60 s; catalog RPCs 100% of 4530, order 100% of 452 (+1359 messages), inventory / notification messages 100%; users: browse 100%, orders 99.81% (1 of 524 timed out at 12:19:37, before the release — the warm-up stall on the winpc → lab path); no new page |
 | Independent deploy | FAIL (run 1, kept) | same isolation (0 changed / replaced / restarted), but journey 73% ≤ 60 s: RabbitMQ's memory alarm (watermark 160 MiB < its idle size) blocked publishers ~40× in 90 min. Fixed in gitops-manifests #132 (watermark 300 MiB) and #133 (the restart that followed crash-looped on the Erlang cookie's permissions — a latent defect) |
-| Fault isolation | **not run** | the fault injection (Chaos Mesh pod-failure on inventory) was refused by this session's permission policy; tooling ready (`run-experiment.sh inventory-down --preflight` passes) |
-| Eventual consistency | **not run** | same (payment-down) |
-| Independent scaling | **not demonstrated** (lab; re-run on winpc below: **FAIL**, 1.0×) | 1 replica: holds 10/s, 20/s once (failed its confirm run), breaks 25/s; order + inventory ×3: holds 20/s twice, breaks 25/s. `check.py scaling` prints 2.00× only because the baseline's 20/s was unstable; both break at 25/s on "saga keeps up" with the node at ~99% of its 8 threads and the single Postgres at 1.8 cores (5 databases, ~10 transactions per order). On this node the limit is the shared CPU and the database, not order / inventory |
+| Fault isolation | **PASS** (run 3, evening) | inventory-down, 10.0 min outage: browse (users, k6) 100% of 12061, catalog server-side 100% of 12039; orders accepted 100% of 1206; every order final 28 s after the recovery; 0 lost (2084 / 2084), 0 double charge, 0 oversell, outboxes drained, DLQ 0. "No order given up" was N/A in `check.py` (the Mac → lab query timed out); verified separately: no `deadline`-trigger transitions in the window. Runs 1–2 below |
+| Fault isolation | FAIL (runs 1 and 2, kept) | user side only: browse 96.3% / 96.4% (k6), orders accepted 96.3% / 96.4%, while catalog server-side was 100% (11731 / 11649) and every consistency row passed (all final 83 s / 0 s after recovery, 0 lost / double charge / oversell). The failures sit in the 1–2 minutes around inventory's recovery and coincide with tailscaled route flaps on xiaoxin; the only structural difference from payment-down was a temporary inventory NodePort (Pod readiness changes → kube-proxy rewrites the NodePort rules → connections arriving over Tailscale disturbed). Run 3 without that NodePort passed. Both runs also ended with a runner error (the lab API timed out over Tailscale when reading ALERTS) |
+| Eventual consistency | **PASS** | payment-down, 10.0 min outage: 1184 orders piled up in CHARGING (peak), all final 99 s after the recovery (limit 300 s); 0 lost (2161 / 2161), 0 double charge (2117 confirmed, 44 cancelled, 0 cancelled with a charge), 0 oversell, outboxes drained, DLQ 0 |
+| Independent scaling | **not demonstrated** (lab; winpc: **FAIL** 1.0× on runtime v0.5.1, after the fix **FAIL** 1.14× — see below) | 1 replica: holds 10/s, 20/s once (failed its confirm run), breaks 25/s; order + inventory ×3: holds 20/s twice, breaks 25/s. `check.py scaling` prints 2.00× only because the baseline's 20/s was unstable; both break at 25/s on "saga keeps up" with the node at ~99% of its 8 threads and the single Postgres at 1.8 cores (5 databases, ~10 transactions per order). On this node the limit is the shared CPU and the database, not order / inventory |
 | No oversell (flash sale) | **PASS** | 1201 orders accepted for 200 units of M6-SCARCE (30/s × 40 s): exactly 200 committed / 200 CONFIRMED, 1001 CANCELLED, books balance, 0 lost, 0 double charges |
 
 Also found: Prometheus 3 writes integer histogram bucket edges as `le="60.0"` (fixed here, in flash_app and in the
@@ -152,6 +153,9 @@ consistency SLO); `winpc.sh stop` could leave a k6 running (fixed).
 
 The lab could not answer the scaling question (its limit was the shared node CPU and the one Postgres for five
 databases), so the system was moved to a performance environment of its own: [`perf/winpc/`](../perf/winpc).
+
+> Kept as history. After the fix (runtime v0.5.2), see [the re-run below](#independent-scaling-on-winpc-after-the-outbox-fix-2026-11-23-third-attempt):
+> the knee went 45 → 140/s, but scaling still gives only 1.14×.
 
 **Verdict: FAIL on durable Postgres — scaling only order + inventory raises the knee 1.0× (45/s → 45/s), not ≥ 2×.**
 The limit is not order or inventory but a commit-time lock in Postgres that every outbox write takes (below). With
@@ -228,6 +232,71 @@ This is also what capped the lab on 11-23 (one CNPG for five databases: same loc
 3. For 2× beyond ~400/s on this host: more CPU for pg-order and pg-inventory (they were the next limit) — that is
    "scale the databases too", outside the promise as worded.
 
+## Independent scaling on winpc after the outbox fix, 2026-11-23 (third attempt)
+
+The root cause above was fixed in **api-factory-runtime v0.5.2**
+([api-factory-runtime#8](https://github.com/MIERAI/api-factory-runtime/pull/8)). `Writer.Write` no longer sends
+`NOTIFY` inside the write transaction. After the commit (`txn.AfterCommit`) the relay is woken by a `NOTIFY` sent
+outside any write transaction, coalesced per connection pool: at most one is in flight per process. The relay's 1 s poll
+stays the safety net. The same release keeps the relay active after a publisher confirm timeout (the bookkeeping
+`UPDATE` used to run on the expired batch context). The runtime's own test, 16 concurrent writers on local Docker,
+gave 1474 commits/s with `NOTIFY` in the transaction, 7866 with no `NOTIFY` and 7352 with the after-commit wake-up.
+Relay pickup latency (commit → `published_at`) was p50 6.7 ms, against 5.9 ms on v0.5.1. Rolled out through
+api-factory#50 and storefront#23, which publishes images `c91363e` for all six v2 images.
+
+Same environment, judge and load as the second attempt. The only change is the images (`perf.env`: `*_TAG=c91363e`).
+**Durable Postgres only** (`synchronous_commit=on`, fsync on; checked in both databases before the runs).
+
+**Verdict: FAIL — scaling order + inventory ×3 raises the knee 1.14× (140/s → 160/s), not ≥ 2×.** The fix did what it
+was meant to: the single-replica knee tripled (45 → 140/s) and there are no more `Lock / object` waits. The next limit is
+again in the databases, and adding service replicas does not move it.
+
+| Run | Postgres | order / inventory replicas | Knee | Above the knee | Ratio |
+|---|---|---|---|---|---|
+| v052-base | durable | 1 / 1 | **140/s** (held ×2) | 160/s fails ×2 (≈ 150 final/s, saga p95 9.1 s) | |
+| v052-x3 | durable | 3 / 3 | **160/s** (held ×2; saga p95 2.4 s) | 180/s fails ×2 (163 / 165 final/s, saga p95 9.7 s) | **1.14×** |
+
+CPU (cores) from the cgroups. Limits are in brackets; × marks a failing step.
+
+| Step | order | inventory | pg-order | pg-inventory | RabbitMQ | host busy |
+|---|---|---|---|---|---|---|
+| v052-base 140/s | 0.41 [0.5] | 0.28 [0.5] | 0.57 [2] | 0.44 [2] | 0.53 | 3.2 / 12 |
+| v052-base 160/s × | 0.43 | 0.30 | 0.63 | 0.47 | 0.53 | 3.6 / 12 |
+| v052-x3 160/s | 0.62 [1.5] | 0.41 [1.5] | 0.71 | 0.77 | 0.61 | 4.1 / 12 |
+| v052-x3 180/s × | 0.64 | 0.43 | 0.79 | 0.83 | 0.60 | 4.4 / 12 |
+
+Every step of both runs had 0 server errors and placement p95 ≤ 0.032 s, with 100% placed within 0.5 s. The failing
+steps fail on throughput: final/placed falls to about 94% / 91%, and the saga's p95 nears 10 s. No container is near
+its CPU limit. Full per-step tables: `perf/winpc/report.py perf/winpc/runs/2026-11-23/v052-*.json`.
+
+### The next bottleneck: hot-row locks and WAL flushes, not the services
+
+`pg_stat_activity` on the failing steps (active client backends, about 25 samples per database):
+
+- **pg-inventory**: about 90% of active backends wait on `Lock / transactionid` or `Lock / tuple` in
+  `UPDATE "stock" SET "available" = "available" - $1 …` (reserve) and `UPDATE "stock" SET "reserved" = "reserved" - $1 …`
+  (commit). The rest wait on `WALWrite` / `WALSync` at `commit`. The flash sale sends every order to **one of three
+  SKUs**. Each order updates its SKU's row twice, and each update holds the row lock until its commit record is
+  flushed. Updates to one SKU are therefore serial, at the pace of the WAL flush: about 3 rows × 1 / (lock hold ≈
+  flush + round trips). More inventory replicas only add waiters: at 3 replicas, about 26 backends queue per sample.
+- **pg-order**: about 95% of active backends wait on `LWLock / WALWrite` or `IO / WALSync` at `commit`. This is group
+  commit at the volume's flush rate (fdatasync ≈ 1.8 ms). Each order costs about 4 commits in order's database.
+
+Neither limit belongs to a service replica, so the promise as worded ("scale order and inventory → ≥ 2× the flash
+sale") cannot hold on this workload with one durable Postgres per service. With the global lock gone, the database-side
+limit moved from 45/s to about 150–165 final orders/s. Options, by cost:
+
+1. Accept it as the documented limit: independent scaling holds while a service's own CPU is the limit. The
+   `synchronous_commit=off` diagnostic showed 2.0× in that regime. Flash-sale throughput is bounded by per-SKU row
+   contention × WAL flush time.
+2. Reduce the time locks are held: lower flush latency (faster WAL storage, `commit_delay` for larger groups), or
+   `synchronous_commit=off` only for inventory's reservation transactions. That needs a durability decision for
+   reservations; orders stay durable.
+3. Change the design for hot SKUs: split stock into N buckets per SKU (reserve from a random bucket), or batch
+   reservations per SKU. That is a domain change in inventory and is outside this test.
+4. Re-measure with load spread over many SKUs (a normal catalog rather than a 3-SKU flash sale) to show the
+   service-side ≥ 2×. That would change what the M6 promise measures and needs a decision first.
+
 ### Reproduce
 
 ```sh
@@ -238,6 +307,7 @@ cd perf/winpc
 ./perf.sh up order=3 inventory=3 && ./perf.sh seed
 ./perf.sh knee durable-x3 --rates 30,40,45,50,60,70,80,100,120,140
 # diagnostic: ./perf.sh up [order=3 inventory=3] sync=off …
+# images: perf.env's *_TAG (c91363e = runtime v0.5.2; compose.yaml's defaults are the v0.5.1 tags of the second attempt)
 ./perf.sh fetch && ./report.py results/results/*.json
 ./perf.sh down && ./perf.sh firewall off         # leave winpc idle (volumes stay)
 ```
