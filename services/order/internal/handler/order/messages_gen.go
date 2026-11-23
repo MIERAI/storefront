@@ -10,10 +10,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/MIERAI/api-factory-runtime/consume"
-	"github.com/MIERAI/api-factory-runtime/message"
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/consume"
+	"github.com/MIERAI/api-factory/runtime/message"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/txn"
 )
 
 // emit: 发出的消息写进 outbox(调用方的事务里: 回滚 = 没有消息;提交之后由中继发到 RabbitMQ)。

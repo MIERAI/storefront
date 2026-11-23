@@ -8,11 +8,11 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/MIERAI/api-factory-runtime/consume"
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/server"
-	"github.com/MIERAI/api-factory-runtime/topology"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/consume"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/server"
+	"github.com/MIERAI/api-factory/runtime/topology"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/catalog/gen/catalog/catalog/v1/catalogv1connect"
 	"github.com/MIERAI/storefront/services/catalog/gen/db"
 	cataloghandler "github.com/MIERAI/storefront/services/catalog/internal/handler/catalog"

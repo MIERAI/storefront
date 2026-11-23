@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 

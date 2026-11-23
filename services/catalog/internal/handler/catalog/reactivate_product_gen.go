@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/MIERAI/api-factory-runtime/clock"
-	"github.com/MIERAI/api-factory-runtime/conv"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/clock"
+	"github.com/MIERAI/api-factory/runtime/conv"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	catalogv1 "github.com/MIERAI/storefront/services/catalog/gen/catalog/catalog/v1"
 )
 

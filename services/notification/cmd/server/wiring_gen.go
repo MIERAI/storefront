@@ -8,12 +8,12 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/MIERAI/api-factory-runtime/consume"
-	"github.com/MIERAI/api-factory-runtime/message"
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/server"
-	"github.com/MIERAI/api-factory-runtime/topology"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/consume"
+	"github.com/MIERAI/api-factory/runtime/message"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/server"
+	"github.com/MIERAI/api-factory/runtime/topology"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/notification/gen/db"
 	"github.com/MIERAI/storefront/services/notification/gen/notification/notification/v1/notificationv1connect"
 	notificationhandler "github.com/MIERAI/storefront/services/notification/internal/handler/notification"

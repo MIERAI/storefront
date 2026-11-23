@@ -1,4 +1,4 @@
-# The v2 system's messaging topology (topology/Dockerfile: api-factory-runtime's CLI + contracts/topology.json) →
+# The v2 system's messaging topology (topology/Dockerfile: the api-factory runtime's CLI + contracts/topology.json) →
 # image (signed) → the v2 lab stack (gitops-manifests v2/overlays/lab: the one-shot Job that applies it before the
 # services start). Changes to contracts/ or topology/ release it.
 name: release-topology

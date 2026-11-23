@@ -3,7 +3,7 @@
 package payment
 
 import (
-	"github.com/MIERAI/api-factory-runtime/anomaly"
+	"github.com/MIERAI/api-factory/runtime/anomaly"
 	paymentv1 "github.com/MIERAI/storefront/services/payment/gen/payment/payment/v1"
 )
 

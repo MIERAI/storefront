@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# api-factory as a tool, pinned: the v2 services' generated code comes from MIERAI/api-factory at FACTORY_SHA (no
-# release tag yet; its module path is `apifactory`, so `go install` does not work: the factory runs from a checkout).
+# api-factory as a tool, pinned: the v2 services' generated code comes from MIERAI/api-factory release FACTORY_VERSION
+# (tag; FACTORY_SHA is the commit it must resolve to: a tag that moved fails). The factory's module path is
+# `apifactory`, so `go install` does not work: it runs from a checkout. One version for the factory and its runtime:
+# factory vX.Y.Z generates code for runtime vX.Y.Z (github.com/MIERAI/api-factory/runtime, services/*/go.mod).
+#
+#   scripts/factory.sh services/catalog upgrade      the service's runtime → the one paired with FACTORY_VERSION
+#                                                    (go.mod + imports, go mod tidy, go build); then generate
 #
 #   scripts/factory.sh services/catalog generate     design → check → prepare (rewrites the generated files)
 #   scripts/factory.sh services/catalog verify       the same, then fails if any file differs from the commit (CI)
@@ -15,7 +20,8 @@
 #
 # FACTORY_DIR: an existing api-factory checkout to use instead (must be at FACTORY_SHA unless FACTORY_ANY_SHA=1).
 set -euo pipefail
-FACTORY_SHA=7749483603bf9fcbf1b1c80e7827a23765c150f6   # api-factory main, 2026-11-23 (#45)
+FACTORY_VERSION=v0.6.0
+FACTORY_SHA=5ef8f4b6bf3f4a9952cdc4ffc2e84fa56b1c1580   # tag v0.6.0 (and runtime/v0.6.0)
 root=$(cd "$(dirname "$0")/.." && pwd)
 project=$(cd "$root/${1:?usage: $0 services/<service> generate|verify|review|<factory command> …}" && pwd); shift
 cmd=${1:?command}; shift
@@ -29,7 +35,9 @@ if [[ $(git -C "$dir" rev-parse HEAD) != "$FACTORY_SHA" ]]; then
     echo "✗ $dir is not at $FACTORY_SHA (FACTORY_ANY_SHA=1 to use it anyway)" >&2; exit 1
   fi
   if [[ -z ${FACTORY_DIR:-} ]]; then
-    git -C "$dir" fetch -q origin "$FACTORY_SHA" 2>/dev/null || git -C "$dir" fetch -q origin
+    git -C "$dir" fetch -q origin "refs/tags/$FACTORY_VERSION:refs/tags/$FACTORY_VERSION" 2>/dev/null || git -C "$dir" fetch -q --tags origin
+    tagged=$(git -C "$dir" rev-parse "$FACTORY_VERSION^{commit}")
+    [[ $tagged == "$FACTORY_SHA" ]] || { echo "✗ api-factory tag $FACTORY_VERSION is $tagged, pinned $FACTORY_SHA" >&2; exit 1; }
     git -C "$dir" -c advice.detachedHead=false checkout -q "$FACTORY_SHA"
   fi
 fi
@@ -39,6 +47,7 @@ case $cmd in
   generate)
     F design && F check && F prepare ;;
   verify)
+    F upgrade --check >/dev/null || { F upgrade --check; exit 1; }   # go.mod: the runtime paired with the factory
     F design >/dev/null && F check >/dev/null && F prepare >/dev/null
     rel=${project#"$root"/}
     # against the index: what is committed (CI) or staged (locally); new untracked files count too
@@ -47,7 +56,7 @@ case $cmd in
       echo "✗ $rel: generated files differ from the designs (run scripts/factory.sh $rel generate and commit):"
       echo "$changed"; git -C "$root" --no-pager diff --stat -- "$rel"; exit 1
     fi
-    echo "✓ $rel: generated files are up to date (api-factory ${FACTORY_SHA:0:7})" ;;
+    echo "✓ $rel: generated files are up to date (api-factory $FACTORY_VERSION, ${FACTORY_SHA:0:7})" ;;
   accept)
     # the factory's acceptance (hand-written + automatic + differential cases) against the real server and an empty
     # database ACCEPT_DATABASE_URL (dropped and re-created tables: never point it at a real one), schema = db/schema

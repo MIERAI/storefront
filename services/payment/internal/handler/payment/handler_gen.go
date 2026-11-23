@@ -5,10 +5,10 @@
 package payment
 
 import (
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/paging"
-	"github.com/MIERAI/api-factory-runtime/shard"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/paging"
+	"github.com/MIERAI/api-factory/runtime/shard"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/payment/gen/db"
 	"github.com/MIERAI/storefront/services/payment/gen/payment/payment/v1/paymentv1connect"
 )

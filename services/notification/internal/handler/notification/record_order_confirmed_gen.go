@@ -6,9 +6,9 @@ package notification
 import (
 	"context"
 
-	"github.com/MIERAI/api-factory-runtime/consume"
-	"github.com/MIERAI/api-factory-runtime/message"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/consume"
+	"github.com/MIERAI/api-factory/runtime/message"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	notificationv1 "github.com/MIERAI/storefront/services/notification/gen/notification/notification/v1"
 	"github.com/jackc/pgx/v5"
 )

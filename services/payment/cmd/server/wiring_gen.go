@@ -8,12 +8,12 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/MIERAI/api-factory-runtime/consume"
-	"github.com/MIERAI/api-factory-runtime/message"
-	"github.com/MIERAI/api-factory-runtime/outbox"
-	"github.com/MIERAI/api-factory-runtime/server"
-	"github.com/MIERAI/api-factory-runtime/topology"
-	"github.com/MIERAI/api-factory-runtime/txn"
+	"github.com/MIERAI/api-factory/runtime/consume"
+	"github.com/MIERAI/api-factory/runtime/message"
+	"github.com/MIERAI/api-factory/runtime/outbox"
+	"github.com/MIERAI/api-factory/runtime/server"
+	"github.com/MIERAI/api-factory/runtime/topology"
+	"github.com/MIERAI/api-factory/runtime/txn"
 	"github.com/MIERAI/storefront/services/payment/gen/db"
 	"github.com/MIERAI/storefront/services/payment/gen/payment/payment/v1/paymentv1connect"
 	paymenthandler "github.com/MIERAI/storefront/services/payment/internal/handler/payment"
