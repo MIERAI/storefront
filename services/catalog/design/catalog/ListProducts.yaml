@@ -1,0 +1,42 @@
+# ============================================================================
+# ListProducts: 某个分类下在售的商品(一览 = 分页)
+# ============================================================================
+API: ListProducts
+说明: 返回某个分类下在售的商品,按 SKU 排序,分页
+背景: 商品列表页。下架的商品不显示
+负责人: storefront
+风险: 低
+
+种类: 一览
+数据来源: products
+
+输入:
+  category: { 类型: 文本, 必填: 是, 长度: 1~50, 说明: 分类, 筛选: category 等于 }
+
+固定条件:
+  - status = 1          # 在售(ProductStatus.ON_SALE 的数据库值)
+
+输出:
+  sku:      SKU
+  name:     商品名
+  price:    售价
+  version:  版本号
+
+排序: [sku 小到大]
+分页: { 默认每页: 20, 每页最多: 100 }
+输出行名: Product
+
+例子:
+  准备数据:
+    products:
+      - { sku: "BEAN-001", name: 咖啡豆,   category: coffee, price: 1200, status: ON_SALE, version: 1, updated_at: "2026-11-01 00:00" }
+      - { sku: "BAG-002",  name: 挂耳包,   category: coffee, price: 180,  status: ON_SALE, version: 3, updated_at: "2026-11-01 00:00" }
+      - { sku: "OLD-003",  name: 旧咖啡豆, category: coffee, price: 900,  status: DISCONTINUED, version: 1, updated_at: "2026-11-01 00:00" }
+      - { sku: "MUG-004",  name: 马克杯,   category: goods,  price: 1600, status: ON_SALE, version: 1, updated_at: "2026-11-01 00:00" }
+  用例:
+    - 说明: 分类内在售的商品,按 SKU 排序(下架的不显示)
+      输入: { category: coffee }
+      结果: { products: ["BAG-002", "BEAN-001"] }
+    - 说明: 其他分类
+      输入: { category: goods }
+      结果: { products: [{ sku: "MUG-004", name: 马克杯, price: "1600", version: 1 }] }

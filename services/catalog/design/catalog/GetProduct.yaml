@@ -1,0 +1,40 @@
+# ============================================================================
+# GetProduct: 按 SKU 取商品详情(下架的也返回,带状态)
+# ============================================================================
+API: GetProduct
+说明: 按 SKU 返回商品详情,包括状态(下架的商品也返回)
+背景: 商品详情页、下单时确认价格。找不到不是错误(返回 found = false)
+负责人: storefront
+风险: 低
+
+种类: 按键取一条
+数据来源: products
+
+输入:
+  sku: { 类型: 文本, 必填: 是, 长度: 3~32, 说明: SKU, 筛选: sku 等于 }
+
+输出:
+  name:       商品名
+  category:   分类
+  price:      售价
+  status:     状态
+  version:    版本号
+  updated_at: 最后更新时间
+
+找不到时: 返回空
+
+例子:
+  准备数据:
+    products:
+      - { sku: "BEAN-001", name: 咖啡豆,   category: coffee, price: 1200.5, status: ON_SALE, version: 2, updated_at: "2026-11-01 09:00" }
+      - { sku: "OLD-003",  name: 旧咖啡豆, category: coffee, price: 900,    status: DISCONTINUED, version: 1, updated_at: "2026-10-01 09:00" }
+  用例:
+    - 说明: 在售的商品
+      输入: { sku: "BEAN-001" }
+      结果: { name: 咖啡豆, category: coffee, price: "1200.5", status: ON_SALE, version: 2, updated_at: "2026-11-01 09:00", found: true }
+    - 说明: 下架的商品也返回(带状态)
+      输入: { sku: "OLD-003" }
+      结果: { status: DISCONTINUED, found: true }
+    - 说明: 不存在的 SKU 不是错误
+      输入: { sku: "NONE-999" }
+      结果: { found: false }

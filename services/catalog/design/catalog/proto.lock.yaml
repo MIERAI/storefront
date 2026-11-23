@@ -1,0 +1,67 @@
+# 由设计编译器维护,不要手改。proto 的字段编号对外发布后不能变: 只追加,删掉的字段编号保留(reserved)
+字段编号:
+    CatalogProductCreatedV1:
+        sku: 1
+    CreateProductRequest:
+        category: 3
+        name: 2
+        price: 4
+        sku: 1
+    CreateProductResponse:
+        category: 3
+        name: 2
+        price: 4
+        sku: 1
+        status: 5
+        updated_at: 7
+        version: 6
+    DiscontinueProductRequest:
+        sku: 1
+        version: 2
+    DiscontinueProductResponse:
+        sku: 1
+        status: 2
+        updated_at: 4
+        version: 3
+    GetProductRequest:
+        sku: 1
+    GetProductResponse:
+        category: 2
+        found: 7
+        name: 1
+        price: 3
+        status: 4
+        updated_at: 6
+        version: 5
+    ListProductsRequest:
+        category: 3
+        page_size: 1
+        page_token: 2
+    ListProductsResponse:
+        next_page_token: 2
+        products: 1
+    Product:
+        name: 2
+        price: 3
+        sku: 1
+        version: 4
+    ProductStatus:
+        PRODUCT_STATUS_DISCONTINUED: 2
+        PRODUCT_STATUS_ON_SALE: 1
+    ReactivateProductRequest:
+        sku: 1
+        version: 2
+    ReactivateProductResponse:
+        sku: 1
+        status: 2
+        updated_at: 4
+        version: 3
+    UpdatePriceRequest:
+        price: 2
+        sku: 1
+        version: 3
+    UpdatePriceResponse:
+        price: 2
+        sku: 1
+        updated_at: 4
+        version: 3

@@ -1,0 +1,63 @@
+# ============================================================================
+# UpdatePrice: 调整售价(W2,命令: 按键更新,乐观锁)
+# ============================================================================
+API: UpdatePrice
+说明: 调整一个商品的售价。请求带读到的版本号,版本号不一致(别人先改过)时不改
+背景: 商品管理画面改价格。两个人同时改同一个商品时,后保存的不能悄悄覆盖先保存的(乐观锁)。已下架的商品也可以改价格(重新上架前准备)
+负责人: storefront
+风险: 中
+
+种类: 按键更新
+数据来源: products
+
+输入:
+  sku:     { 类型: 文本,       必填: 是, 长度: 3~32, 格式: 代码, 说明: SKU, 键: sku }
+  price:   { 类型: 非负十进制, 必填: 是, 说明: 新的售价, 写入: price }
+  version: { 类型: 整数32,     必填: 是, 范围: "> 0", 说明: 读到的版本号, 乐观锁: version }
+
+设置:
+  updated_at: 现在
+
+输出:                             # 更新之后的行
+  sku:        SKU
+  price:      售价
+  version:    版本号(更新之后 = 请求的版本号 + 1)
+  updated_at: 最后更新时间(= 请求的时刻)
+
+找不到时: "product not found: {sku}"
+
+业务规则:
+  - 情况: 版本号和现在的不一致
+    结果: 版本冲突(ABORTED),什么都不写。调用方重新读商品(GetProduct),再决定要不要改
+  - 情况: 新的价格和现在的一样
+    结果: 照样更新(版本号加 1、更新时间 = 请求的时刻),不特别处理
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    products:
+      - { sku: "BEAN-001", name: 咖啡豆, category: coffee, price: 1200, status: ON_SALE, version: 3, updated_at: "2026-11-01 09:00" }
+      - { sku: "BAG-002", name: 挂耳包, category: coffee, price: 180, status: ON_SALE, version: 1, updated_at: "2026-11-01 09:00" }
+  用例:
+    - 说明: 版本号一致 → 改价格,版本号加 1
+      输入: { sku: "BEAN-001", price: "1300", version: 3 }
+      结果: { sku: "BEAN-001", price: "1300", version: 4, updated_at: "2026-11-22 10:00" }
+      之后:
+        products:
+          - { sku: "BEAN-001", name: 咖啡豆, price: 1300, status: ON_SALE, version: 4, updated_at: "2026-11-22 10:00" }
+          - { sku: "BAG-002", price: 180, version: 1, updated_at: "2026-11-01 09:00" }
+    - 说明: 版本号是旧的(别人先改过)→ 版本冲突,什么都不写
+      输入: { sku: "BEAN-001", price: "1300", version: 2 }
+      错误: 版本冲突
+      之后: 不变
+    - 说明: 不存在的商品 → 找不到
+      输入: { sku: "NONE-999", price: "100", version: 1 }
+      错误: 找不到
+      之后: 不变
+    - 说明: 小数的价格保持写法
+      输入: { sku: "BAG-002", price: "180.50", version: 1 }
+      结果: { price: "180.50", version: 2 }
+      之后:
+        products:
+          - { sku: "BEAN-001", price: 1200, version: 3 }
+          - { sku: "BAG-002", price: 180.5, version: 2 }
