@@ -1,0 +1,35 @@
+# The v2 system's messaging topology (topology/Dockerfile: api-factory-runtime's CLI + contracts/topology.json) →
+# image (signed) → the v2 lab stack (gitops-manifests v2/overlays/lab: the one-shot Job that applies it before the
+# services start). Changes to contracts/ or topology/ release it.
+name: release-topology
+on:
+  push:
+    branches: [main]
+    paths: ["contracts/**", "topology/**", ".github/workflows/release-topology.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run: { shell: bash }   # explicit bash = -eo pipefail
+concurrency: { group: release-topology, cancel-in-progress: false }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: the CLI's runtime = the services' runtime
+        run: scripts/topology-check.sh
+  image:
+    needs: test
+    permissions: { contents: read, packages: write, id-token: write }
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/build-image.yml@main
+    with: { image: storefront-topology, context: ., dockerfile: topology/Dockerfile, sign: true }
+  promote:
+    needs: image
+    uses: MIERAI/gitops-platform-blueprint/.github/workflows/promote-dev.yml@main
+    with:
+      app: v2      # gitops-manifests v2/app.yaml says which file holds this image
+      env: lab
+      images: ${{ needs.image.outputs.name }}=${{ needs.image.outputs.tag }}   # ghcr.io/<this repository's owner>/storefront-topology
+    secrets:
+      MANIFESTS_DEPLOY_KEY: ${{ secrets.MANIFESTS_DEPLOY_KEY }}
