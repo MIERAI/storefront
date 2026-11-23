@@ -95,7 +95,12 @@ if ($c) { "run: $c"; Get-Content "F:\m6\results\$c.log" -Tail 12 -ErrorAction Si
     ;;
   stop)
     ps 'Stop-ScheduledTask -TaskName M6K6 -ErrorAction SilentlyContinue
-Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "k6.exe" -and $_.CommandLine -like "*F:\m6\*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; "stopped k6 " + $_.ProcessId }'
+Get-CimInstance Win32_Process | Where-Object { $_.Name -eq "k6.exe" -and $_.CommandLine -like "*F:\m6\*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force; "stopped k6 " + $_.ProcessId }
+# the command line of a SYSTEM process is not always readable: when the capacity runner is not running either, every
+# k6 left is ours (2026-11-23: one survived the filter above and loaded the lab for 10 more minutes)
+if ((Get-ScheduledTask -TaskName LoadTest -ErrorAction SilentlyContinue).State -ne "Running") {
+  Get-Process k6 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.Id -Force; "stopped k6 " + $_.Id }
+}'
     ;;
   *)
     sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
