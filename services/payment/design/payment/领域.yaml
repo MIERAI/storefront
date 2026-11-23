@@ -1,0 +1,24 @@
+# 领域: payment(storefront v2 的支付服务,模拟)。这个服务独占的数据库(db/schema/payment.sql)
+领域: payment
+说明: 订单的支付(一个订单最多一笔)
+时区: Asia/Tokyo
+
+表:
+  payments:
+    说明: 订单的支付结果。订单号是扣款的幂等键
+    主键: [order_id]
+    更新方式: 可以更新
+    列:
+      order_id:   订单号
+      amount:     金额(十进制)
+      status:     { 说明: 结果, 枚举: PaymentStatus }
+      reason:     失败的原因(成功时为空)
+      created_at: 扣款时间
+
+枚举:
+  PaymentStatus:
+    说明: 支付的结果
+    值:
+      SUCCEEDED: { 说明: 成功, 数据库值: 1 }
+      FAILED:    { 说明: 失败, 数据库值: 2 }
+    读到不认识的值: 返回"未指定",并记录到监控指标

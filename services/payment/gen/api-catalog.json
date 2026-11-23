@@ -1,0 +1,130 @@
+[
+  {
+    "id": "payment.charge-payment",
+    "method": "ChargePayment",
+    "summary": "给一个订单扣款(模拟的支付网关,超过 10 万就拒绝),回答 payment.succeeded 或 payment.failed。同一个订单再来时按第一次的结果回答(收到 payment.charge v1;入口 = RabbitMQ 的队列,不是 HTTP)",
+    "path": "/payment.payment.v1.PaymentMessageHandlerService/ChargePayment",
+    "pattern": "message",
+    "cases": [
+      {
+        "name": "10 万以下 → 成功",
+        "request": {
+          "amount": "4500.50",
+          "order_id": 7
+        },
+        "response": {}
+      },
+      {
+        "name": "超过 10 万 → 拒绝",
+        "request": {
+          "amount": "100000.01",
+          "order_id": 8
+        },
+        "response": {}
+      },
+      {
+        "name": "同一个订单再来(这次金额小)→ 按第一次的结果(失败)回答",
+        "request": {
+          "amount": "1",
+          "order_id": 5
+        },
+        "response": {}
+      }
+    ]
+  },
+  {
+    "id": "payment.get-payment-by-order",
+    "method": "GetPaymentByOrder",
+    "summary": "返回某个订单的支付结果",
+    "path": "/payment.payment.v1.PaymentService/GetPaymentByOrder",
+    "pattern": "get_by_id",
+    "cases": [
+      {
+        "name": "成功的支付(没有失败原因)",
+        "request": {
+          "order_id": 101
+        },
+        "response": {
+          "amount": "1380",
+          "found": true,
+          "reason": "$absent",
+          "status": "PAYMENT_STATUS_SUCCEEDED"
+        }
+      },
+      {
+        "name": "失败的支付",
+        "request": {
+          "order_id": 102
+        },
+        "response": {
+          "found": true,
+          "reason": "余额不足",
+          "status": "PAYMENT_STATUS_FAILED"
+        }
+      },
+      {
+        "name": "还没有扣款的订单",
+        "request": {
+          "order_id": 999
+        },
+        "response": {
+          "found": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "payment.record-charge",
+    "method": "RecordCharge",
+    "summary": "记录一个订单的扣款结果。同一个订单再次记录时不再写,返回第一次的结果",
+    "path": "/payment.payment.v1.PaymentService/RecordCharge",
+    "pattern": "command",
+    "cases": [
+      {
+        "name": "新的订单 → 记录,created = true",
+        "request": {
+          "amount": "1200.50",
+          "order_id": 1002,
+          "reason": "card declined",
+          "status": "PAYMENT_STATUS_FAILED"
+        },
+        "response": {
+          "amount": "1200.50",
+          "created": true,
+          "order_id": 1002,
+          "reason": "card declined",
+          "status": "PAYMENT_STATUS_FAILED"
+        }
+      },
+      {
+        "name": "成功,不传原因 → 原因为空",
+        "request": {
+          "amount": "300",
+          "order_id": 1003,
+          "status": "PAYMENT_STATUS_SUCCEEDED"
+        },
+        "response": {
+          "amount": "300",
+          "created": true,
+          "order_id": 1003,
+          "status": "PAYMENT_STATUS_SUCCEEDED"
+        }
+      },
+      {
+        "name": "重复的请求 → 不再写,返回第一次的结果,created = false",
+        "request": {
+          "amount": "2400",
+          "order_id": 1001,
+          "status": "PAYMENT_STATUS_SUCCEEDED"
+        },
+        "response": {
+          "amount": "2400",
+          "created": false,
+          "created_at": "2026-11-21T00:00:00Z",
+          "order_id": 1001,
+          "status": "PAYMENT_STATUS_SUCCEEDED"
+        }
+      }
+    ]
+  }
+]

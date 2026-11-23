@@ -1,0 +1,30 @@
+# GetStock: 一个 SKU 的库存
+API: GetStock
+说明: 返回一个 SKU 的可售数量和已预留数量
+背景: 商品详情页显示是否有货。没有库存记录 = 没有登记过,不是错误
+负责人: storefront
+风险: 低
+
+种类: 按键取一条
+数据来源: stock
+
+输入:
+  sku: { 类型: 文本, 必填: 是, 长度: 3~32, 说明: SKU, 筛选: sku 等于 }
+
+输出:
+  available: 可售数量
+  reserved:  已预留数量
+
+找不到时: 返回空
+
+例子:
+  准备数据:
+    stock:
+      - { sku: "BEAN-001", available: 12, reserved: 3, version: 4, updated_at: "2026-11-01 09:00" }
+  用例:
+    - 说明: 有库存记录
+      输入: { sku: "BEAN-001" }
+      结果: { available: 12, reserved: 3, found: true }
+    - 说明: 没有登记过的 SKU
+      输入: { sku: "NONE-999" }
+      结果: { found: false }

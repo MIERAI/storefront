@@ -1,0 +1,111 @@
+# 由设计编译器维护,不要手改。proto 的字段编号对外发布后不能变: 只追加,删掉的字段编号保留(reserved)
+字段编号:
+    GetOrderRequest:
+        id: 1
+    GetOrderResponse:
+        created_at: 5
+        customer_id: 2
+        id: 1
+        items: 7
+        status: 3
+        total: 4
+        updated_at: 6
+    InventoryCommitV1:
+        items: 2
+        order_id: 1
+    InventoryCommitV1Item:
+        qty: 2
+        sku: 1
+    InventoryCommittedV1:
+        order_id: 1
+    InventoryReleaseV1:
+        items: 2
+        order_id: 1
+    InventoryReleaseV1Item:
+        qty: 2
+        sku: 1
+    InventoryReleasedV1:
+        order_id: 1
+    InventoryReservationFailedV1:
+        order_id: 1
+        reason: 2
+    InventoryReserveV1:
+        items: 2
+        order_id: 1
+    InventoryReserveV1Item:
+        qty: 2
+        sku: 1
+    InventoryReservedV1:
+        items: 2
+        order_id: 1
+    InventoryReservedV1Item:
+        qty: 2
+        sku: 1
+    ListOrdersByCustomerRequest:
+        customer_id: 3
+        page_size: 1
+        page_token: 2
+    ListOrdersByCustomerResponse:
+        next_page_token: 2
+        orders: 1
+    ListStuckOrdersRequest:
+        stuck_minutes: 1
+    ListStuckOrdersResponse:
+        orders: 1
+    OrderCancelledV1:
+        customer_id: 2
+        order_id: 1
+        reason: 3
+    OrderConfirmedV1:
+        customer_id: 2
+        order_id: 1
+        total: 3
+    OrderItem:
+        amount: 5
+        line_no: 1
+        price: 4
+        qty: 3
+        sku: 2
+    OrderStatus:
+        ORDER_STATUS_CANCELLED: 7
+        ORDER_STATUS_CHARGING: 3
+        ORDER_STATUS_CONFIRMED: 6
+        ORDER_STATUS_CONFIRMING: 4
+        ORDER_STATUS_PENDING: 1
+        ORDER_STATUS_RELEASING: 5
+        ORDER_STATUS_RESERVING: 2
+    OrderSummary:
+        created_at: 4
+        id: 1
+        item_count: 5
+        items_total: 6
+        status: 2
+        total: 3
+    PaymentChargeV1:
+        amount: 2
+        order_id: 1
+    PaymentFailedV1:
+        order_id: 1
+        reason: 2
+    PaymentSucceededV1:
+        amount: 2
+        order_id: 1
+    PlaceOrderItem:
+        line_no: 1
+        price: 4
+        qty: 3
+        sku: 2
+    PlaceOrderRequest:
+        customer_id: 1
+        items: 2
+    PlaceOrderResponse:
+        created_at: 3
+        order_id: 1
+        status: 2
+    StuckOrder:
+        created_at: 5
+        customer_id: 2
+        id: 1
+        status: 3
+        total: 4
+        updated_at: 6

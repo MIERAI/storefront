@@ -1,0 +1,66 @@
+# ============================================================================
+# ReleaseStock: 收到 inventory.release → 释放预留(M3;消息处理器: 墓碑 + 跳过 + 仅当 已更新)
+# ============================================================================
+API: ReleaseStock
+说明: "释放一个订单的预留(补偿): HELD 的加回可售;预留还没到的留下墓碑(之后迟到的预留不再扣)"
+背景: 预留失败 / 支付失败之后的补偿。不保证顺序,释放可能先于预留到达。重复的释放不能加回两次
+负责人: storefront
+风险: 高
+
+种类: 消息处理
+收到: inventory.release
+每项: 消息.items
+
+操作:
+  - 墓碑:
+      幂等新建: reservations
+      键: [order_id, sku]
+      值: { order_id: 消息.order_id, sku: 项.sku, qty: 项.qty, status: RELEASED }
+  - 释放:
+      更新: reservations
+      键: { order_id: 消息.order_id, sku: 项.sku }
+      设置: { status: RELEASED }
+      条件: "status = HELD"
+      不满足: 跳过
+      找不到时: "reservation not found (order {order_id})"
+  - 加回:
+      更新: stock
+      键: { sku: 项.sku }
+      仅当: 释放.已更新
+      设置: { available: "available + 释放.qty", reserved: "reserved - 释放.qty", version: "version + 1", updated_at: 现在 }
+      找不到时: "stock not found (order {order_id})"
+
+结果:
+  成功:
+    发出:
+      - inventory.released: { order_id: 消息.order_id }
+
+业务规则:
+  - 情况: 预留是 HELD
+    结果: 改成 RELEASED,按预留的数量加回可售、减少已预留
+  - 情况: 预留还没到
+    结果: 留下 RELEASED 的墓碑(不动库存)
+  - 情况: 已经释放过 / 已经确认
+    结果: 跳过(不动库存)
+  - 情况: 释放完成
+    结果: 发出 inventory.released
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    stock:
+      - { sku: "BEAN-001", available: 7, reserved: 5, version: 4, updated_at: "2026-11-01 09:00" }
+    reservations:
+      - { order_id: 7, sku: "BEAN-001", qty: 3, status: HELD, expires_at: "2026-11-23 09:00", created_at: "2026-11-22 09:00" }
+  用例:
+    - 说明: HELD → 加回;没到的 SKU → 墓碑
+      消息: { order_id: 7, items: [ { sku: "BEAN-001", qty: 3 }, { sku: "BAG-002", qty: 1 } ] }
+      结果: 成功
+      发出:
+        - inventory.released: { order_id: 7 }
+      之后:
+        stock:
+          - { sku: "BEAN-001", available: 10, reserved: 2, version: 5, updated_at: "2026-11-22 10:00" }
+        reservations:
+          - { order_id: 7, sku: "BEAN-001", qty: 3, status: RELEASED }
+          - { order_id: 7, sku: "BAG-002", qty: 1, status: RELEASED }

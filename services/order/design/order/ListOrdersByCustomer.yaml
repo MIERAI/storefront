@@ -1,0 +1,53 @@
+# ListOrdersByCustomer(storefront v2 Q6): 顾客的订单历史,每个订单带明细的件数和合计
+API: ListOrdersByCustomer
+说明: 返回一个顾客的订单(新到旧,分页),每个订单带明细的行数和明细金额的合计
+背景: 我的页面的订单历史。列表里不展开明细,只显示件数和合计(合计 = 明细金额之和,和订单金额对账用);没有明细的订单件数 0、合计 0
+负责人: storefront
+风险: 低
+
+种类: 一览
+数据来源: orders
+
+子聚合:
+  item_count:  { 表: order_items, 条件: [id = order_id], 计算: 件数 }
+  items_total: { 表: order_items, 条件: [id = order_id], 计算: 合计(amount) }
+
+输入:
+  customer_id: { 类型: 整数64, 必填: 是, 范围: "> 0", 说明: 顾客 ID, 筛选: customer_id 等于 }
+
+输出:
+  id:          订单号
+  status:      状态
+  total:       订单金额
+  created_at:  下单时间
+  item_count:  明细的行数(没有明细 = 0)
+  items_total: 明细金额的合计(没有明细 = 0)
+
+排序: [created_at 新到旧, id 大到小]
+分页: { 默认每页: 20, 每页最多: 100 }
+输出行名: OrderSummary
+
+例子:
+  准备数据:
+    orders:
+      - { id: 1, customer_id: 7, status: CONFIRMED, total: "3250", created_at: "2026-11-01 09:00", updated_at: "2026-11-01 09:05" }
+      - { id: 2, customer_id: 7, status: CANCELLED, total: "0",    created_at: "2026-11-02 10:00", updated_at: "2026-11-02 10:30" }
+      - { id: 3, customer_id: 7, status: PENDING,   total: "0.3",  created_at: "2026-11-02 10:00", updated_at: "2026-11-02 10:00" }
+      - { id: 4, customer_id: 8, status: CONFIRMED, total: "500",  created_at: "2026-11-03 11:00", updated_at: "2026-11-03 11:00" }
+    order_items:
+      - { order_id: 1, line_no: 1, sku: "BEAN-001", qty: 2, price: "1000.00" }
+      - { order_id: 1, line_no: 2, sku: "BEAN-002", qty: 1, price: "1250" }
+      - { order_id: 3, line_no: 1, sku: "SAMPLE-1", qty: 1, price: "0.1" }
+      - { order_id: 3, line_no: 2, sku: "SAMPLE-2", qty: 1, price: "0.2" }
+      - { order_id: 4, line_no: 1, sku: "TEA-001",  qty: 5, price: "100" }
+  用例:
+    - 说明: 新到旧(同一时刻按订单号大到小);没有明细的订单件数 0、合计 0;合计是精确的十进制(0.1 + 0.2 = 0.3)
+      输入: { customer_id: 7 }
+      结果:
+        orders:
+          - { id: 3, status: PENDING, item_count: 2, items_total: "0.3" }
+          - { id: 2, status: CANCELLED, item_count: 0, items_total: "0" }
+          - { id: 1, status: CONFIRMED, total: "3250", item_count: 2, items_total: "3250" }
+    - 说明: 没有订单的顾客
+      输入: { customer_id: 9 }
+      结果: { orders: [] }

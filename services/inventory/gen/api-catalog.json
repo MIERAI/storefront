@@ -1,0 +1,213 @@
+[
+  {
+    "id": "inventory.adjust-stock",
+    "method": "AdjustStock",
+    "summary": "调整一个 SKU 的可售数量(入库、盘点、报损),同时写一条调整的审计记录。调整之后可售数量会小于 0 时不调整",
+    "path": "/inventory.inventory.v1.InventoryService/AdjustStock",
+    "pattern": "command",
+    "cases": [
+      {
+        "name": "入库 → 可售数量增加,版本号加 1,写审计记录(数据库生成 id = 6)",
+        "request": {
+          "delta": 5,
+          "reason": "ADJUSTMENT_REASON_RECEIVED",
+          "sku": "BEAN-001"
+        },
+        "response": {
+          "adjusted_at": "2026-11-22T01:00:00Z",
+          "adjustment_id": 6,
+          "available": 15,
+          "reserved": 2,
+          "sku": "BEAN-001",
+          "version": 4
+        }
+      },
+      {
+        "name": "报损到正好 0 → 调整",
+        "request": {
+          "delta": -10,
+          "reason": "ADJUSTMENT_REASON_DAMAGED",
+          "sku": "BEAN-001"
+        },
+        "response": {
+          "adjustment_id": 6,
+          "available": 0,
+          "version": 4
+        }
+      },
+      {
+        "name": "盘点没有差异(0)→ 照样记录",
+        "request": {
+          "delta": 0,
+          "reason": "ADJUSTMENT_REASON_STOCKTAKE",
+          "sku": "BAG-002"
+        },
+        "response": {
+          "adjustment_id": 6,
+          "available": 0,
+          "sku": "BAG-002",
+          "version": 2
+        }
+      }
+    ]
+  },
+  {
+    "id": "inventory.commit-stock",
+    "method": "CommitStock",
+    "summary": "确认一个订单的预留(支付成功之后): HELD → COMMITTED,已预留数量减少(出库)。预留已经释放了 → 进 DLQ(收到 inventory.commit v1;入口 = RabbitMQ 的队列,不是 HTTP)",
+    "path": "/inventory.inventory.v1.InventoryMessageHandlerService/CommitStock",
+    "pattern": "message",
+    "cases": [
+      {
+        "name": "HELD → COMMITTED,已预留减少",
+        "request": {
+          "items": [
+            {
+              "qty": 3,
+              "sku": "BEAN-001"
+            }
+          ],
+          "order_id": 7
+        },
+        "response": {}
+      }
+    ]
+  },
+  {
+    "id": "inventory.get-stock",
+    "method": "GetStock",
+    "summary": "返回一个 SKU 的可售数量和已预留数量",
+    "path": "/inventory.inventory.v1.InventoryService/GetStock",
+    "pattern": "get_by_id",
+    "cases": [
+      {
+        "name": "有库存记录",
+        "request": {
+          "sku": "BEAN-001"
+        },
+        "response": {
+          "available": 12,
+          "found": true,
+          "reserved": 3
+        }
+      },
+      {
+        "name": "没有登记过的 SKU",
+        "request": {
+          "sku": "NONE-999"
+        },
+        "response": {
+          "found": false
+        }
+      }
+    ]
+  },
+  {
+    "id": "inventory.init-stock",
+    "method": "InitStock",
+    "summary": "收到新商品的事件,为这个 SKU 建一条库存记录(可用 0、已预留 0)。已经有了就什么都不改(收到 catalog.product_created v1;入口 = RabbitMQ 的队列,不是 HTTP)",
+    "path": "/inventory.inventory.v1.InventoryMessageHandlerService/InitStock",
+    "pattern": "message",
+    "cases": [
+      {
+        "name": "新的 SKU → 库存 0",
+        "request": {
+          "sku": "MUG-004"
+        },
+        "response": {}
+      },
+      {
+        "name": "已经有库存记录 → 不改",
+        "request": {
+          "sku": "BEAN-001"
+        },
+        "response": {}
+      }
+    ]
+  },
+  {
+    "id": "inventory.list-stock-by-skus",
+    "method": "ListStockBySkus",
+    "summary": "返回指定的多个 SKU 的库存,按 SKU 排序。没有记录的 SKU 不出现在结果里",
+    "path": "/inventory.inventory.v1.InventoryService/ListStockBySkus",
+    "pattern": "list_all",
+    "cases": [
+      {
+        "name": "指定的 SKU,按 SKU 排序(没有记录的不出现)",
+        "request": {
+          "skus": [
+            "MUG-004",
+            "BAG-002",
+            "NONE-999"
+          ]
+        },
+        "response": {
+          "stock": [
+            {
+              "available": 0,
+              "reserved": 0,
+              "sku": "BAG-002"
+            },
+            {
+              "available": 5,
+              "reserved": 1,
+              "sku": "MUG-004"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "inventory.release-stock",
+    "method": "ReleaseStock",
+    "summary": "释放一个订单的预留(补偿): HELD 的加回可售;预留还没到的留下墓碑(之后迟到的预留不再扣)(收到 inventory.release v1;入口 = RabbitMQ 的队列,不是 HTTP)",
+    "path": "/inventory.inventory.v1.InventoryMessageHandlerService/ReleaseStock",
+    "pattern": "message",
+    "cases": [
+      {
+        "name": "HELD → 加回;没到的 SKU → 墓碑",
+        "request": {
+          "items": [
+            {
+              "qty": 3,
+              "sku": "BEAN-001"
+            },
+            {
+              "qty": 1,
+              "sku": "BAG-002"
+            }
+          ],
+          "order_id": 7
+        },
+        "response": {}
+      }
+    ]
+  },
+  {
+    "id": "inventory.reserve-stock",
+    "method": "ReserveStock",
+    "summary": "为一个订单预留库存。每个 SKU 的可售数量都够才预留(全部或全不),回答 inventory.reserved 或 inventory.reservation_failed(收到 inventory.reserve v1;入口 = RabbitMQ 的队列,不是 HTTP)",
+    "path": "/inventory.inventory.v1.InventoryMessageHandlerService/ReserveStock",
+    "pattern": "message",
+    "cases": [
+      {
+        "name": "两个 SKU 都够 → 都预留,发出 inventory.reserved",
+        "request": {
+          "items": [
+            {
+              "qty": 3,
+              "sku": "BEAN-001"
+            },
+            {
+              "qty": 1,
+              "sku": "BAG-002"
+            }
+          ],
+          "order_id": 7
+        },
+        "response": {}
+      }
+    ]
+  }
+]

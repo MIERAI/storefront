@@ -1,0 +1,83 @@
+# ============================================================================
+# PlaceOrder(storefront v2 W5): 下单 = 订单 + N 个明细 + 发出 inventory.reserve(状态机 OrderSaga 的初始转移)
+# ============================================================================
+API: PlaceOrder
+说明: 下单。订单和明细一起写进去(订单金额 = 明细金额之和),订单进入 RESERVING,同时发出 inventory.reserve
+背景: 下单 saga(OrderSaga)的开始。单价由 web 从 catalog 取来传进来(价格的组合在 web 里)。订单写进去了预留的命令就一定发出,
+  没写进去(参数错误、数据库失败)就一定不发
+负责人: storefront
+风险: 高
+
+种类: 组合命令
+
+输入:
+  customer_id: { 类型: 整数64, 必填: 是, 范围: "> 0", 说明: 顾客 id }
+  items:
+    类型: 组列表
+    必填: 是
+    个数: 1~50
+    唯一: [sku]
+    说明: 明细(同一个 SKU 只能出现一次;行号也不能重复)
+    组:
+      line_no: { 类型: 整数32, 范围: 1~50, 说明: 行号 }
+      sku:     { 类型: 文本, 长度: 3~32, 格式: 代码, 说明: SKU }
+      qty:     { 类型: 整数32, 范围: 1~1000, 说明: 数量 }
+      price:   { 类型: 非负十进制, 说明: 单价 }
+
+操作:
+  - 订单:
+      新建: orders
+      值: { customer_id: 输入.customer_id, status: RESERVING, total: 0, created_at: 现在, updated_at: 现在 }
+  - 明细:
+      新建: order_items
+      每项: 输入.items
+      值: { order_id: 订单.id, line_no: 项.line_no, sku: 项.sku, qty: 项.qty, price: 项.price }
+  - 合计:
+      更新: orders
+      每项: 输入.items
+      键: { id: 订单.id }
+      设置: { total: "total + 项.qty * 项.price" }
+      找不到时: "order not found"
+
+发出:
+  - inventory.reserve: { order_id: 订单.id, items: 输入.items }
+
+输出:
+  order_id:   { 说明: 订单号, 来自: 订单.id }
+  status:     { 说明: 订单的状态(= 等待库存预留), 来自: 订单.status }
+  created_at: { 说明: 下单时间(= 请求的时刻), 来自: 订单.created_at }
+
+业务规则:
+  - 情况: 下单成功
+    结果: 写订单(RESERVING,金额 = 明细的 数量 × 单价 之和,十进制精确)和明细,发出 inventory.reserve(SKU 和数量,按请求里的顺序)
+  - 情况: 同一个 SKU 出现两次
+    结果: 参数错误,什么都不写
+  - 情况: 行号重复(SKU 不同)
+    结果: 已存在(ALREADY_EXISTS),什么都不写、不发出
+
+例子:
+  现在: "2026-11-22 10:00"
+  准备数据:
+    orders: []
+  用例:
+    - 说明: 下单 → 订单 + 明细,金额 = 明细之和,发出 inventory.reserve
+      输入: { customer_id: 7, items: [ { line_no: 1, sku: "BEAN-001", qty: 2, price: "1000.50" }, { line_no: 2, sku: "TEA-001", qty: 1, price: "0.25" } ] }
+      结果: { order_id: 1, status: RESERVING, created_at: "2026-11-22 10:00" }
+      发出:
+        - inventory.reserve: { order_id: 1, items: [ { sku: "BEAN-001", qty: 2 }, { sku: "TEA-001", qty: 1 } ] }
+      之后:
+        orders:
+          - { id: 1, customer_id: 7, status: RESERVING, total: "2001.25", version: 1, state_attempts: 0, created_at: "2026-11-22 10:00", updated_at: "2026-11-22 10:00" }
+        order_items:
+          - { order_id: 1, line_no: 1, sku: "BEAN-001", qty: 2, price: "1000.50", amount: "2001.00" }
+          - { order_id: 1, line_no: 2, sku: "TEA-001", qty: 1, price: "0.25", amount: "0.25" }
+    - 说明: 同一个 SKU 两次 → 参数错误
+      输入: { customer_id: 7, items: [ { line_no: 1, sku: "BEAN-001", qty: 1, price: "1" }, { line_no: 2, sku: "BEAN-001", qty: 1, price: "1" } ] }
+      错误: 参数错误
+      发出: []
+      之后: 不变
+    - 说明: 行号重复 → 已存在,什么都不写
+      输入: { customer_id: 7, items: [ { line_no: 1, sku: "BEAN-001", qty: 1, price: "1" }, { line_no: 1, sku: "TEA-001", qty: 1, price: "1" } ] }
+      错误: 已存在
+      发出: []
+      之后: 不变
