@@ -10,7 +10,7 @@ tool (
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
 	connectrpc.com/connect v1.21.1
-	github.com/MIERAI/api-factory/runtime v0.6.1-0.20261124004103-403ec48d8b0f
+	github.com/MIERAI/api-factory/runtime v0.7.0
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/pressly/goose/v3 v3.29.0
 	google.golang.org/protobuf v1.36.12

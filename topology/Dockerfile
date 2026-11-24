@@ -9,7 +9,7 @@
 # RUNTIME_VERSION = the runtime the services are generated against (CI checks it equals services/*/go.mod).
 ARG IMAGE_MIRROR=mirror.gcr.io/library
 FROM ${IMAGE_MIRROR}/golang:1.27.4-alpine AS build
-ARG RUNTIME_VERSION=v0.6.1-0.20261124004103-403ec48d8b0f
+ARG RUNTIME_VERSION=v0.7.0
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOBIN=/out go install -trimpath -ldflags "-s -w" \
     github.com/MIERAI/api-factory/runtime/cmd/factory-runtime@${RUNTIME_VERSION}
