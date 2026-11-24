@@ -140,3 +140,7 @@ docker run -d --name web --network storefront -p 8080:8080 -e API_URL=http://api
 curl localhost:8080/                                   # the page, with the api's products
 curl -X POST localhost:8080/orders -d '{"amount":1200}'  # {"id":1}; the worker marks it done within a second
 ```
+
+## Contributing
+
+Changes reach `main` through pull requests (squash merge) once CI (`.github/workflows/ci.yml`) is green.
