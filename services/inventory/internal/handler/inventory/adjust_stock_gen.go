@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/MIERAI/api-factory/runtime/clock"
 	"github.com/MIERAI/api-factory/runtime/conv"
+	"github.com/MIERAI/api-factory/runtime/metrics"
 	"github.com/MIERAI/api-factory/runtime/txn"
 	inventoryv1 "github.com/MIERAI/storefront/services/inventory/gen/inventory/inventory/v1"
 )
@@ -18,7 +19,8 @@ import (
 // AdjustStock 调整一个 SKU 的可售数量(入库、盘点、报损),同时写一条调整的审计记录。调整之后可售数量会小于 0 时不调整
 func (h *Handler) AdjustStock(ctx context.Context, req *connect.Request[inventoryv1.AdjustStockRequest]) (*connect.Response[inventoryv1.AdjustStockResponse], error) {
 	m := req.Msg
-	var r1 struct { // 库存(stock)的返回值
+	defer metrics.HotKey("inventory.adjust-stock", fmt.Sprint(m.GetSku()), time.Now()) // 热键监控: 同时抢 = 不确定(写入集中度 → 告警 → 建议分桶)
+	var r1 struct {                                                                    // 库存(stock)的返回值
 		Sku       string
 		Available int32
 		Reserved  int32

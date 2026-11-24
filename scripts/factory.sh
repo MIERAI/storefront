@@ -25,10 +25,9 @@
 # prefix; the commit is fetched directly, and FACTORY_RUNTIME (read by `factory upgrade` and `prepare`) pins the
 # services' runtime to that same pseudo-version. Back to a release = a tag here again.
 set -euo pipefail
-# api-factory main 403ec48 (runtime tracing, MIERAI/api-factory#62), not tagged yet: the first commit with
-# OpenTelemetry tracing in the runtime (v0.6.0 + tracing; the owner decides the release)
-FACTORY_VERSION=v0.6.1-0.20261124004103-403ec48d8b0f
-FACTORY_SHA=403ec48d8b0f465e3f78d0d5de6d3189fff18a2f
+# api-factory release v0.7.0 (tags v0.7.0 + runtime/v0.7.0): the runtime with OpenTelemetry tracing (MIERAI/api-factory#62)
+FACTORY_VERSION=v0.7.0
+FACTORY_SHA=85de05d39229ecb3d2a6b9be1ee42533e7a19a77
 pseudo=
 if [[ $FACTORY_VERSION =~ -0\.[0-9]{14}-([0-9a-f]{12})$ ]]; then
   [[ ${BASH_REMATCH[1]} == "${FACTORY_SHA:0:12}" ]] || { echo "✗ FACTORY_VERSION $FACTORY_VERSION is not FACTORY_SHA ${FACTORY_SHA:0:12}" >&2; exit 1; }
