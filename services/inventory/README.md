@@ -29,6 +29,15 @@ What the service reads at start-up (`runtime/server`). The image already sets `P
 | `REQUEST_TIMEOUT_MS` | optional | `3000` | per-request timeout |
 | `SHUTDOWN_TIMEOUT_MS` | optional | `15000` | graceful shutdown limit for HTTP and for the background workers (each); keep it ≥ the message transaction timeout (10s) |
 | `APP_VERSION` | optional | `dev` | returned in /healthz as X-App-Version (the image sets it from the build arg VERSION) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | optional | — | OTLP/HTTP collector, e.g. `http://tempo:4318`: distributed tracing is on when this (or OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) is set, off otherwise. The other standard OTEL_* variables apply (OTEL_BSP_*, OTEL_EXPORTER_OTLP_HEADERS / _TIMEOUT, …) |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | optional | — | the collector's full traces URL (`…/v1/traces`); overrides OTEL_EXPORTER_OTLP_ENDPOINT |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | optional | `http/protobuf` | only `http/protobuf` (anything else: the server does not start) |
+| `OTEL_TRACES_SAMPLER` | optional | `parentbased_always_on` | head sampling: `parentbased_traceidratio` with OTEL_TRACES_SAMPLER_ARG keeps that share of new traces and follows the caller's decision (one order = one trace, sampled or not as a whole) |
+| `OTEL_TRACES_SAMPLER_ARG` | optional | `1.0` | the ratio of the *traceidratio samplers (0–1) |
+| `OTEL_SERVICE_NAME` | optional | — | service.name of the spans (default: SERVICE_NAME) |
+| `OTEL_RESOURCE_ATTRIBUTES` | optional | — | more resource attributes, e.g. `k8s.namespace.name=shop-prod,deployment.environment.name=prod` |
+| `OTEL_SDK_DISABLED` | optional | — | `true`: tracing off whatever else is set |
+| `OTEL_TRACES_EXPORTER` | optional | `otlp` | `none`: tracing off; only `otlp` otherwise |
 
 Test environments only (never set them in production):
 

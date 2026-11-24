@@ -106,7 +106,7 @@ func (h *Handler) OrderSagaOnInventoryReserved(ctx context.Context, tx pgx.Tx, e
 		_, err := handlerResult(err)
 		return err
 	}
-	sm.Transition("OrderSaga", "RESERVING", "CHARGING", "inventory.reserved")
+	sm.Transitioned(ctx, "OrderSaga", "RESERVING", "CHARGING", "inventory.reserved")
 	d1 := &orderv1.PaymentChargeV1{ // payment.charge v1 的 data
 		OrderId: r1.Id,
 		Amount:  r1.Total,
@@ -173,7 +173,7 @@ func (h *Handler) OrderSagaOnInventoryReservationFailed(ctx context.Context, tx 
 		_, err := handlerResult(err)
 		return err
 	}
-	sm.Transition("OrderSaga", "RESERVING", "CANCELLED", "inventory.reservation_failed")
+	sm.Transitioned(ctx, "OrderSaga", "RESERVING", "CANCELLED", "inventory.reservation_failed")
 	sm.Completed("OrderSaga", "CANCELLED", r1.CreatedAt, clock.Now(ctx))
 	d1 := &orderv1.OrderCancelledV1{ // order.cancelled v1 的 data
 		OrderId:    r1.Id,
@@ -245,7 +245,7 @@ func (h *Handler) OrderSagaOnPaymentSucceeded(ctx context.Context, tx pgx.Tx, en
 		_, err := handlerResult(err)
 		return err
 	}
-	sm.Transition("OrderSaga", "CHARGING", "CONFIRMING", "payment.succeeded")
+	sm.Transitioned(ctx, "OrderSaga", "CHARGING", "CONFIRMING", "payment.succeeded")
 	loadItems, err := orderSagaLoadItems(ctx, tx, r1.Id)
 	if err != nil {
 		return err
@@ -322,7 +322,7 @@ func (h *Handler) OrderSagaOnPaymentFailed(ctx context.Context, tx pgx.Tx, env m
 		_, err := handlerResult(err)
 		return err
 	}
-	sm.Transition("OrderSaga", "CHARGING", "RELEASING", "payment.failed")
+	sm.Transitioned(ctx, "OrderSaga", "CHARGING", "RELEASING", "payment.failed")
 	loadItems, err := orderSagaLoadItems(ctx, tx, r1.Id)
 	if err != nil {
 		return err
@@ -399,7 +399,7 @@ func (h *Handler) OrderSagaOnInventoryCommitted(ctx context.Context, tx pgx.Tx, 
 		_, err := handlerResult(err)
 		return err
 	}
-	sm.Transition("OrderSaga", "CONFIRMING", "CONFIRMED", "inventory.committed")
+	sm.Transitioned(ctx, "OrderSaga", "CONFIRMING", "CONFIRMED", "inventory.committed")
 	sm.Completed("OrderSaga", "CONFIRMED", r1.CreatedAt, clock.Now(ctx))
 	d1 := &orderv1.OrderConfirmedV1{ // order.confirmed v1 的 data
 		OrderId:    r1.Id,
@@ -468,7 +468,7 @@ func (h *Handler) OrderSagaOnInventoryReleased(ctx context.Context, tx pgx.Tx, e
 		_, err := handlerResult(err)
 		return err
 	}
-	sm.Transition("OrderSaga", "RELEASING", "CANCELLED", "inventory.released")
+	sm.Transitioned(ctx, "OrderSaga", "RELEASING", "CANCELLED", "inventory.released")
 	sm.Completed("OrderSaga", "CANCELLED", r1.CreatedAt, clock.Now(ctx))
 	d1 := &orderv1.OrderCancelledV1{ // order.cancelled v1 的 data
 		OrderId:    r1.Id,

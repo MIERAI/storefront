@@ -19,9 +19,22 @@
 # committed, and CI checks that the generated files match the designs (verify).
 #
 # FACTORY_DIR: an existing api-factory checkout to use instead (must be at FACTORY_SHA unless FACTORY_ANY_SHA=1).
+#
+# Between releases FACTORY_VERSION may be a Go pseudo-version of an untagged api-factory commit (what
+# `go list -m github.com/MIERAI/api-factory/runtime@<sha>` prints): its last 12 hex digits must be FACTORY_SHA's
+# prefix; the commit is fetched directly, and FACTORY_RUNTIME (read by `factory upgrade` and `prepare`) pins the
+# services' runtime to that same pseudo-version. Back to a release = a tag here again.
 set -euo pipefail
-FACTORY_VERSION=v0.6.0
-FACTORY_SHA=5ef8f4b6bf3f4a9952cdc4ffc2e84fa56b1c1580   # tag v0.6.0 (and runtime/v0.6.0)
+# api-factory main 403ec48 (runtime tracing, MIERAI/api-factory#62), not tagged yet: the first commit with
+# OpenTelemetry tracing in the runtime (v0.6.0 + tracing; the owner decides the release)
+FACTORY_VERSION=v0.6.1-0.20261124004103-403ec48d8b0f
+FACTORY_SHA=403ec48d8b0f465e3f78d0d5de6d3189fff18a2f
+pseudo=
+if [[ $FACTORY_VERSION =~ -0\.[0-9]{14}-([0-9a-f]{12})$ ]]; then
+  [[ ${BASH_REMATCH[1]} == "${FACTORY_SHA:0:12}" ]] || { echo "✗ FACTORY_VERSION $FACTORY_VERSION is not FACTORY_SHA ${FACTORY_SHA:0:12}" >&2; exit 1; }
+  pseudo=1
+  export FACTORY_RUNTIME=$FACTORY_VERSION
+fi
 root=$(cd "$(dirname "$0")/.." && pwd)
 project=$(cd "$root/${1:?usage: $0 services/<service> generate|verify|review|<factory command> …}" && pwd); shift
 cmd=${1:?command}; shift
@@ -34,7 +47,10 @@ if [[ $(git -C "$dir" rev-parse HEAD) != "$FACTORY_SHA" ]]; then
   if [[ -n ${FACTORY_DIR:-} && -z ${FACTORY_ANY_SHA:-} ]]; then
     echo "✗ $dir is not at $FACTORY_SHA (FACTORY_ANY_SHA=1 to use it anyway)" >&2; exit 1
   fi
-  if [[ -z ${FACTORY_DIR:-} ]]; then
+  if [[ -z ${FACTORY_DIR:-} && -n $pseudo ]]; then
+    git -C "$dir" fetch -q origin "$FACTORY_SHA"   # an untagged commit: by its id
+    git -C "$dir" -c advice.detachedHead=false checkout -q "$FACTORY_SHA"
+  elif [[ -z ${FACTORY_DIR:-} ]]; then
     git -C "$dir" fetch -q origin "refs/tags/$FACTORY_VERSION:refs/tags/$FACTORY_VERSION" 2>/dev/null || git -C "$dir" fetch -q --tags origin
     tagged=$(git -C "$dir" rev-parse "$FACTORY_VERSION^{commit}")
     [[ $tagged == "$FACTORY_SHA" ]] || { echo "✗ api-factory tag $FACTORY_VERSION is $tagged, pinned $FACTORY_SHA" >&2; exit 1; }
